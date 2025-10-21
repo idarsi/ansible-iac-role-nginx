@@ -1,0 +1,28 @@
+---
+###############################################################################
+#
+# loop_servers.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# SETTING VARIABLES
+###############################################################################
+
+- name: "Checking if required variables are defined"
+  ansible.builtin.assert:
+    that:
+      - nginx_servers is defined
+    fail_msg: "All tests did not pass"
+
+###############################################################################
+# LOOPING THROUGH VIRTUAL HOSTS TO BE ADDED
+###############################################################################
+
+- name: "Looping through servers"
+  ansible.builtin.include_tasks: "{{ state }}.yml"
+  loop: "{{ nginx_servers }}"
+  loop_control:
+    loop_var: nginx_server_record

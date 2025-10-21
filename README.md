@@ -1,6 +1,6 @@
 
 ANSIBLE-IAC-ROLE-NGINX
-===============================================================================
+======================
 **COPYRIGHT** 2025 ^(ida|arsi)$ collective  
 **LICENSE** MIT License [LICENSE](LICENSE)  
 **AUTHORS**

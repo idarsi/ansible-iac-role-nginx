@@ -1,0 +1,77 @@
+---
+###############################################################################
+#
+# server_present.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# SETTING VARIABLES
+###############################################################################
+
+- name: "Setting what variables are configured"
+  ansible.builtin.set_fact:
+    nginx_server: "{{ nginx_server_record.server_name }}"
+    nginx_configuration: "{{ nginx_server_record }}"
+  when: nginx_server_record is defined
+
+- name: "Checking if required variables are defined"
+  ansible.builtin.assert:
+    that:
+      - nginx_server is defined
+    fail_msg: "All tests did not pass"
+
+###############################################################################
+# ENSURING HTML DIRECTORY IS PRESENT
+###############################################################################
+
+- name: "Ensuring www directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_www_directory }}/{{ nginx_server }}/html"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring www log directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_log_directory }}/{{ nginx_server }}"
+    state: directory
+    mode: "0755"
+
+###############################################################################
+# CHECKING IF THERE IS NEED FOR CERTIFICATE
+###############################################################################
+
+- name: "Checking for certificate"
+  ansible.builtin.include_tasks: certificate_present.yml
+  when: nginx_server_record.ssl_certificate_key is defined and nginx_server_record.ssl_certificate is defined
+
+###############################################################################
+# ENSURING VIRTUAL HOST IS PRESENT
+###############################################################################
+
+- name: "Rendering configuration lines"
+  ansible.builtin.set_fact:
+    rendered_lines: |
+      server {
+      {% for item in nginx_configuration | dict2items if item.value is not none %}
+        {{ item.key }} {{ item.value }};
+      {% endfor %}
+      }
+  when: nginx_configuration is defined
+
+- name: "Ensuring Nginx configuration matches template"
+  ansible.builtin.copy:
+    content: "{{ rendered_lines }}"
+    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_server }}"
+    mode: "0640"
+    owner: "root"
+    group: "root"
+  when: rendered_lines is defined
+
+- name: "Writing log"
+  ansible.builtin.include_tasks: log_write.yml
+  vars:
+    iac_log_write: "Ensured {{ nginx_server }} was available"
+  when: iac_package is defined

@@ -15,8 +15,8 @@ no_proxy: ""
 iac_service_key: "nginx"
 
 iac_supported_os:
-  - { name: "Rocky", versions: [ "8", "9", "10" ] }
-  - { name: "RedHat", versions: [ "8", "9", "10" ] }
+  - { name: "Rocky", versions: ["8", "9", "10"] }
+  - { name: "RedHat", versions: ["8", "9", "10"] }
 
 ###############################################################################
 # DNF related configurations
@@ -32,3 +32,10 @@ iac_dnf_repo_path: "/etc/yum.repos.d/nginx.repo"
 
 iac_ansible_report: true
 iac_ansible_report_tasks_path: "/root/ansible-report.log"
+
+nginx_etc_directory: "/etc/nginx"
+nginx_log_directory: "/var/log/nginx"
+nginx_www_directory: "/var/www"
+nginx_public_key_directory: "/etc/pki/tls/certs"
+nginx_private_key_directory: "/etc/pki/tls/private"
+nginx_certificate_public_key_days: 365

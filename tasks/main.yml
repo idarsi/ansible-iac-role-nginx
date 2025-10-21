@@ -15,17 +15,49 @@
   ansible.builtin.fail:
     msg: "Unsupported operating system: {{ ansible_distribution }} {{ ansible_distribution_major_version }}"
   when: >
-    iac_supported_os | selectattr('name', 'equalto', ansible_distribution) 
-                     | selectattr('versions', 'contains', ansible_distribution_major_version) 
-                     | list 
+    iac_supported_os | selectattr('name', 'equalto', ansible_distribution)
+                     | selectattr('versions', 'contains', ansible_distribution_major_version)
+                     | list
                      | length == 0
 
 - name: "Checking if service_key is found from variables"
   ansible.builtin.fail:
     msg: "iac_blueprint.{{ iac_service_key }} is not defined"
   when:
-   - iac_blueprint is not defined
-   - iac_blueprint.{{ iac_service_key }} is not defined
+    - iac_blueprint is not defined
+    - iac_blueprint.{{ iac_service_key }} is not defined
+
+###############################################################################
+# SETTING VARIABLES
+###############################################################################
+
+- name: "Setting what virtual hosts are to be configured"
+  ansible.builtin.set_fact:
+    nginx_servers: "{{ iac_blueprint.nginx.servers }}"
+
+- name: "Checking proxy address if it's defined"
+  ansible.builtin.set_fact:
+    proxy_host: "{{ (http_proxy | regex_replace('^https?://', '')).split(':')[0] }}"
+    proxy_port: "{{ (http_proxy | regex_replace('^https?://', '')).split(':')[1] | int }}"
+  when: >
+    (
+      (http_proxy is defined and http_proxy != "")
+      or (https_proxy is defined and https_proxy != "")
+    )
+    and (inventory_hostname not in (no_proxy | default("") | split(",")))
+
+- name: "Checking that proxy connection is working if it's defined"
+  ansible.builtin.wait_for:
+    host: "{{ proxy_host }}"
+    port: "{{ proxy_port }}"
+    state: "started"
+    timeout: 3
+  when: >
+    (
+      (http_proxy is defined and http_proxy != "")
+      or (https_proxy is defined and https_proxy != "")
+    )
+    and (inventory_hostname not in (no_proxy | default("") | split(",")))
 
 ###############################################################################
 # CHECKING STATES
@@ -34,3 +66,19 @@
 - name: "STATE: Ensure Nginx installation is present"
   ansible.builtin.include_tasks: present.yml
   when: state == 'present'
+
+- name: "STATE: Ensure Nginx virtual_hosts are present"
+  ansible.builtin.include_tasks: loop_servers.yml
+  when: state == 'server_present'
+
+- name: "STATE: Ensure Nginx site is enabled"
+  ansible.builtin.include_tasks: loop_servers.yml
+  when: state == 'server_enabled'
+
+- name: "STATE: Ensure Nginx is started"
+  ansible.builtin.include_tasks: started.yml
+  when: state == 'started'
+
+- name: "STATE: Ensure Nginx is stopped"
+  ansible.builtin.include_tasks: stopped.yml
+  when: state == 'stopped'

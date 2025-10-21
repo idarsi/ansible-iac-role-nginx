@@ -1,9 +1,9 @@
 ---
 ###############################################################################
 #
-# package_present.yml
+# server_enabled.yml
 #
-# @author Arsi Atomi <arsi@atomi.sh>
+# @author Arsi Atomi
 #
 ###############################################################################
 
@@ -11,31 +11,31 @@
 # SETTING VARIABLES
 ###############################################################################
 
+- name: "Setting what variables are configured"
+  ansible.builtin.set_fact:
+    nginx_server: "{{ nginx_server_record.server_name }}"
+    nginx_configuration: "{{ nginx_server_record }}"
+  when: nginx_server_record is defined
+
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - iac_package is defined
+      - nginx_server is defined
     fail_msg: "All tests did not pass"
 
 ###############################################################################
-# ENSURING PACKAGE IS PRESENT
+# ENSURING SERVER IS ENABLED
 ###############################################################################
 
-- name: "Ensuring packages are installed"
-  ansible.builtin.dnf:
-    name: "{{ iac_package }}"
-    sslverify: "{{ dnf_sslverify | default(omit) }}"
-    validate_certs: "{{ dnf_validate_certs | default(omit) }}"
-    disable_gpg_check: "{{ dnf_disable_gpg_check | default(omit) }}"
-    state: "present"
-  environment:
-    http_proxy: "{{ http_proxy | default(omit) }}"
-    https_proxy: "{{ https_proxy | default(omit) }}"
-    no_proxy: "{{ no_proxy | default(omit) }}"
-  when: iac_package is defined
+- name: "Create a symbolic link for server"
+  ansible.builtin.file:
+    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_server }}"
+    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_server }}"
+    owner: root
+    group: root
+    state: link
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
-    iac_log_write: "Ensured {{ iac_package }} was installed"
-  when: iac_package is defined
+    iac_log_write: "Ensured {{ nginx_server }} was enabled"

@@ -31,3 +31,39 @@
   ansible.builtin.include_tasks: package_present.yml
   vars:
     iac_package: "nginx"
+
+###############################################################################
+# ENSURING CONFIGURATION DIRECTORIES EXIST
+###############################################################################
+
+- name: "Ensuring repository is in place"
+  ansible.builtin.template:
+    src: "nginx.conf.j2"
+    dest: "{{ nginx_etc_directory }}/nginx.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "Ensuring sites-available directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-available"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring sites-enabled directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-enabled"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring www directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_www_directory }}"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring log directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_log_directory }}"
+    state: directory
+    mode: "0755"
