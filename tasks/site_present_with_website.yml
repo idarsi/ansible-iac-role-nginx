@@ -13,7 +13,8 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_site_autoconfigure)) | bool }}"
+    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_default_site_autoconfigure)) }}"
+    nginx_ssl_certificate_type: "{{ nginx_site.ssl_certificate_type | default(nginx_default_ssl_certificate_type) }}"
 
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
@@ -50,7 +51,7 @@
     nginx_server_name: "{{ nginx_site.name }}"
     nginx_ssl_certificate: "{{ nginx_public_key_directory }}/{{ nginx_site.name }}.crt"
     nginx_ssl_certificate_key: "{{ nginx_private_key_directory }}/{{ nginx_site.name }}.key"
-  when: ssl_certificates == 'selfsigned'
+  when: nginx_ssl_certificate_type == 'selfsigned'
 
 ###############################################################################
 # ENSURING VIRTUAL HOST IS CONFIGURED

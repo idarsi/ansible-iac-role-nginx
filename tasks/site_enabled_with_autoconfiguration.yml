@@ -14,7 +14,7 @@
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - nginx_autoconfigure is true
+      - nginx_autoconfigure is defined
       - nginx_etc_directory is defined
       - nginx_site.name is defined
     fail_msg: "All tests did not pass"

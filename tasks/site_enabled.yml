@@ -13,13 +13,13 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_site_autoconfigure)) | bool }}"
+    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_default_site_autoconfigure)) }}"
 
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
       - nginx_site.name is defined
-      - nginx_site.servers is defined or nginx_autoconfigure is true
+      - nginx_site.servers is defined or nginx_autoconfigure is defined
     fail_msg: "All tests did not pass"
 
 ###############################################################################
@@ -27,8 +27,8 @@
 ###############################################################################
 
 - name: "Configuring with autoconfiguration if it is enabled"
-  ansible.builtin.include_tasks: site_present_with_autoconfiguration.yml
-  when: nginx_autoconfigure is true
+  ansible.builtin.include_tasks: site_enabled_with_autoconfiguration.yml
+  when: nginx_autoconfigure == 'website'
 
 ###############################################################################
 # LOOPING THROUGH VIRTUAL HOSTS TO BE ADDED
