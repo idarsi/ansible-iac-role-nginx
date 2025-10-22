@@ -39,3 +39,5 @@ nginx_www_directory: "/var/www"
 nginx_public_key_directory: "/etc/pki/tls/certs"
 nginx_private_key_directory: "/etc/pki/tls/private"
 nginx_certificate_public_key_days: 365
+
+nginx_site_autoconfigure: false

@@ -1,0 +1,92 @@
+---
+###############################################################################
+#
+# site_present_with_autoconfiguration.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# SETTING VARIABLES
+###############################################################################
+
+- name: "Setting variables"
+  ansible.builtin.set_fact:
+    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_site_autoconfigure)) | bool }}"
+
+- name: "Checking if required variables are defined"
+  ansible.builtin.assert:
+    that:
+      - nginx_autoconfigure is defined
+      - nginx_log_directory is defined
+      - nginx_site.name is defined
+      - nginx_www_directory is defined
+    fail_msg: "All tests did not pass"
+
+###############################################################################
+# CREATING SITE DIRECTORIES
+###############################################################################
+
+- name: "Ensuring www directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_www_directory }}/{{ nginx_site.name }}/html"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring www log directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_log_directory }}/{{ nginx_site.name }}"
+    state: directory
+    mode: "0755"
+
+###############################################################################
+# ENSURING THERE IS CERTIFICATE
+###############################################################################
+
+- name: "Checking for certificate"
+  ansible.builtin.include_tasks: certificate_present.yml
+  vars:
+    nginx_server_name: "{{ nginx_site.name }}"
+    nginx_ssl_certificate: "{{ nginx_public_key_directory }}/{{ nginx_site.name }}.crt"
+    nginx_ssl_certificate_key: "{{ nginx_private_key_directory }}/{{ nginx_site.name }}.key"
+  when: ssl_certificates == 'selfsigned'
+
+###############################################################################
+# ENSURING VIRTUAL HOST IS CONFIGURED
+###############################################################################
+
+- name: "Rendering server autoconfiguration lines"
+  ansible.builtin.set_fact:
+    rendered_lines: |
+      server {
+        listen 80;
+        server_name {{ nginx_site.name }};
+        return 301 https://{{ nginx_site.name }}$request_uri;
+      }
+
+- name: "Ensuring Nginx configuration matches template"
+  ansible.builtin.copy:
+    content: "{{ rendered_lines }}"
+    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_80"
+    mode: "0640"
+    owner: "root"
+    group: "root"
+
+- name: "Rendering server configuration lines"
+  ansible.builtin.set_fact:
+    rendered_lines: |
+      server {
+        listen 443 ssl;
+        server_name {{ nginx_site.name }};
+        ssl_certificate: "{{ nginx_public_key_directory }}/{{ nginx_site.name }}.crt;"
+        ssl_certificate_key: "{{ nginx_private_key_directory }}/{{ nginx_site.name }}.key;"
+      }
+
+- name: "Ensuring Nginx configuration matches template"
+  ansible.builtin.copy:
+    content: "{{ rendered_lines }}"
+    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_443"
+    mode: "0640"
+    owner: "root"
+    group: "root"

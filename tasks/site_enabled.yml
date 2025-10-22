@@ -1,7 +1,7 @@
 ---
 ###############################################################################
 #
-# server_present.yml
+# site_enabled.yml
 #
 # @author Arsi Atomi
 #
@@ -11,35 +11,37 @@
 # SETTING VARIABLES
 ###############################################################################
 
+- name: "Setting variables"
+  ansible.builtin.set_fact:
+    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_site_autoconfigure)) | bool }}"
+
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - nginx_etc_directory is defined
       - nginx_site.name is defined
-      - nginx_server is defined or nginx_site.autoconfigure is true
+      - nginx_site.servers is defined or nginx_autoconfigure is true
     fail_msg: "All tests did not pass"
 
 ###############################################################################
-# CHECKING IF THERE IS NEED FOR CERTIFICATE
+# CREATING CONFIGURATION IF AUTOCONFIGURATION IS TRUE
 ###############################################################################
 
-- name: "Checking for certificate"
-  ansible.builtin.include_tasks: certificate_present.yml
-  vars:
-    nginx_server_name: "{{ nginx_site.name }}"
-    nginx_ssl_certificate_key: "{{ nginx_server.ssl_certificate_key }}"
-    nginx_ssl_certificate: "{{ nginx_server.ssl_certificate }}"
-  when: nginx_server.ssl_certificate_key is defined and nginx_server.ssl_certificate is defined and nginx_site.ssl_certificates == 'selfsigned'
+- name: "Configuring with autoconfiguration if it is enabled"
+  ansible.builtin.include_tasks: site_present_with_autoconfiguration.yml
+  when: nginx_autoconfigure is true
 
 ###############################################################################
-# ENSURING VIRTUAL HOST IS PRESENT
+# LOOPING THROUGH VIRTUAL HOSTS TO BE ADDED
 ###############################################################################
 
-- name: "Ensuring server is present if configuration exists"
-  ansible.builtin.include_tasks: server_present_with_configuration.yml
-  when: nginx_server is defined
+- name: "Looping through servers"
+  ansible.builtin.include_tasks: "server_enabled.yml"
+  loop: "{{ nginx_site.servers }}"
+  loop_control:
+    loop_var: nginx_server
+  when: nginx_site.servers is defined
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
-    iac_log_write: "Ensured servers in site {{ nginx_site.name }} were available"
+    iac_log_write: "Ensured {{ nginx_site.name }} was enabled"

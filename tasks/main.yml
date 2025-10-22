@@ -33,7 +33,7 @@
 
 - name: "Setting what virtual hosts are to be configured"
   ansible.builtin.set_fact:
-    nginx_servers: "{{ iac_blueprint.nginx.servers }}"
+    nginx_sites: "{{ iac_blueprint.nginx.sites }}"
 
 - name: "Checking proxy address if it's defined"
   ansible.builtin.set_fact:
@@ -67,13 +67,13 @@
   ansible.builtin.include_tasks: present.yml
   when: state == 'present'
 
-- name: "STATE: Ensure Nginx virtual_hosts are present"
-  ansible.builtin.include_tasks: loop_servers.yml
-  when: state == 'server_present'
+- name: "STATE: Ensure Nginx sites are present"
+  ansible.builtin.include_tasks: loop_sites.yml
+  when: state == 'site_present'
 
 - name: "STATE: Ensure Nginx site is enabled"
-  ansible.builtin.include_tasks: loop_servers.yml
-  when: state == 'server_enabled'
+  ansible.builtin.include_tasks: loop_sites.yml
+  when: state == 'site_enabled'
 
 - name: "STATE: Ensure Nginx is started"
   ansible.builtin.include_tasks: started.yml

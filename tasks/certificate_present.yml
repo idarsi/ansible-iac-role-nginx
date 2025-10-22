@@ -11,19 +11,27 @@
 # SETTING VARIABLES
 ###############################################################################
 
+- name: "Checking if required variables are defined"
+  ansible.builtin.assert:
+    that:
+      - nginx_server_name is defined
+      - nginx_ssl_certificate is defined
+      - nginx_ssl_certificate_key is defined
+    fail_msg: "All tests did not pass"
+
 - name: "Checking if private key exists for server"
   ansible.builtin.stat:
-    path: "{{ nginx_server_record.ssl_certificate_key }}"
+    path: "{{ nginx_ssl_certificate_key }}"
   register: nginx_key_file
 
 - name: "Checking if public key exists for server"
   ansible.builtin.stat:
-    path: "{{ nginx_server_record.ssl_certificate }}"
+    path: "{{ nginx_ssl_certificate }}"
   register: nginx_crt_file
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    pg_cli_command: "openssl genrsa -out {{ nginx_server_record.ssl_certificate_key }}"
+    pg_cli_command: "openssl genrsa -out {{ nginx_ssl_certificate_key }}"
 
 - name: "Ensuring certificate private key exists if needed"
   ansible.builtin.command: "{{ pg_cli_command }}"
@@ -35,16 +43,16 @@
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
-    iac_log_write: "Created private key to {{ nginx_server_record.ssl_certificate_key }}"
+    iac_log_write: "Created private key to {{ nginx_ssl_certificate_key }}"
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
     pg_cli_command: >-
       openssl req -new -x509 -nodes
-      -key {{ nginx_server_record.ssl_certificate_key }}
-      -out {{ nginx_server_record.ssl_certificate }}
+      -key {{ nginx_ssl_certificate_key }}
+      -out {{ nginx_ssl_certificate }}
       -days {{ nginx_certificate_public_key_days }}
-      -subj "/CN={{ nginx_server }}"
+      -subj "/CN={{ nginx_server_name }}"
 
 - name: "Ensuring certificate public key exists if needed"
   ansible.builtin.command: "{{ pg_cli_command }}"
@@ -56,4 +64,4 @@
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
-    iac_log_write: "Created public key to {{ nginx_server_record.ssl_certificate }}"
+    iac_log_write: "Created public key to {{ nginx_ssl_certificate }}"
