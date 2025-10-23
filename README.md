@@ -52,13 +52,31 @@ iac_blueprint:
           - key: <value>
 ```
 
-A minimal working iac_blueprint that installs Nginx with one virtual host:
+A minimal working iac_blueprint that installs Nginx with one virtual host and uses autoconfigure.
 
 ```yaml
 iac_blueprint:
   nginx:
     sites:
-      - name: example.org                                 # site specific name
-        ssl_certificate_type: selfsigned                  # none|selfsigned (default: none)
-        autoconfigure: website                            # none|website|proxy (default: website)
+      - name: example.org
+        ssl_certificate_type: selfsigned
+        autoconfigure: website
+```
+
+Same configuration done manually.
+
+```yaml
+iac_blueprint:
+  nginx:
+    sites:
+      - name: example.org
+        ssl_certificate_type: selfsigned
+        servers:
+          - listen: 80
+            server_name: example.org
+            return: 301 https://example.org$request_uri
+          - listen: 443 ssl
+            server_name: example.org
+            ssl_certificate: /etc/pki/tls/certs/example.org.crt
+            ssl_certificate_key: /etc/pki/tls/private/example.org.key
 ```
