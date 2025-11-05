@@ -27,12 +27,22 @@
     pg_cli_command: "systemctl start nginx.service"
   when: service_active.stdout != 'active'
 
+- name: "Setting variables"
+  ansible.builtin.set_fact:
+    pg_cli_command: "systemctl restart nginx.service"
+  when: service_active.stdout == 'active'
+
 - name: "Ensuring instance is started"
   ansible.builtin.command: "{{ pg_cli_command }}"
-  when: service_active.stdout != 'active'
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
     iac_log_write: "Started service nginx"
   when: service_active.stdout != 'active'
+
+- name: "Writing log"
+  ansible.builtin.include_tasks: log_write.yml
+  vars:
+    iac_log_write: "Restarted service nginx"
+  when: service_active.stdout == 'active'
