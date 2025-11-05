@@ -4,6 +4,7 @@ ANSIBLE-IAC-ROLE-NGINX
 **LICENSE** MIT License [LICENSE](LICENSE)  
 **AUTHORS**
 - Arsi Atomi <arsi@atomi.sh>  
+- Arsi Atomi <arsi.atomi@valtori.fi>  
 
 Overview
 ========

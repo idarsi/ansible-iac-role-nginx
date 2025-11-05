@@ -1,0 +1,40 @@
+---
+###############################################################################
+#
+# certificate_absent.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# SETTING VARIABLES
+###############################################################################
+
+- name: "Checking if required variables are defined"
+  ansible.builtin.assert:
+    that:
+      - nginx_server_name is defined
+      - nginx_ssl_certificate is defined
+      - nginx_ssl_certificate_key is defined
+    fail_msg: "All tests did not pass"
+
+- name: "Ensure certification private key file is absent"
+  ansible.builtin.file:
+    path: "{{ nginx_ssl_certificate_key }}"
+    state: absent
+
+- name: "Writing log"
+  ansible.builtin.include_tasks: log_write.yml
+  vars:
+    iac_log_write: "Removed private key from {{ nginx_ssl_certificate_key }}"
+
+- name: "Ensure certification public key file is absent"
+  ansible.builtin.file:
+    path: "{{ nginx_ssl_certificate }}"
+    state: absent
+
+- name: "Writing log"
+  ansible.builtin.include_tasks: log_write.yml
+  vars:
+    iac_log_write: "Removed public key from {{ nginx_ssl_certificate }}"

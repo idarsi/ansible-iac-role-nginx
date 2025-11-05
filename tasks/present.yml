@@ -72,3 +72,7 @@
     path: "{{ nginx_log_directory }}"
     state: directory
     mode: "0755"
+
+- name: "Ensuring correct SELinux context"
+  ansible.builtin.command: restorecon -Rv {{ nginx_www_directory }}
+  when: ansible_virtualization_type not in ["docker", "podman", "lxc"]

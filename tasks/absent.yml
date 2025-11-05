@@ -12,12 +12,6 @@
 ###############################################################################
 
 
-###############################################################################
-# ENSURING REPOSITORIES ARE PRESENT
-###############################################################################
-
-- name: "Ensuring Nginx repositories are present"
-  ansible.builtin.include_tasks: repo_present.yml
 
 ###############################################################################
 # ENSURING SERVICE IS STOPPED
@@ -34,3 +28,10 @@
   ansible.builtin.include_tasks: package_absent.yml
   vars:
     iac_package: "nginx"
+
+###############################################################################
+# ENSURING REPOSITORIES ARE PRESENT
+###############################################################################
+
+- name: "Ensuring Nginx repositories are present"
+  ansible.builtin.include_tasks: repo_present.yml

@@ -1,7 +1,7 @@
 ---
 ###############################################################################
 #
-# package_present.yml
+# server_disabled_with_autoconfiguration.yml
 #
 # @author Arsi Atomi
 #
@@ -14,28 +14,26 @@
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - iac_package is defined
+      - nginx_autoconfigure is defined
+      - nginx_etc_directory is defined
+      - nginx_site.name is defined
     fail_msg: "All tests did not pass"
 
 ###############################################################################
-# ENSURING PACKAGE IS PRESENT
+# ENSURING SERVER IS ENABLED
 ###############################################################################
 
-- name: "Ensuring packages are installed"
-  ansible.builtin.dnf:
-    name: "{{ iac_package }}"
-    sslverify: "{{ dnf_sslverify | default(omit) }}"
-    validate_certs: "{{ dnf_validate_certs | default(omit) }}"
-    disable_gpg_check: "{{ dnf_disable_gpg_check | default(omit) }}"
-    state: "present"
-  environment:
-    http_proxy: "{{ http_proxy | default(omit) }}"
-    https_proxy: "{{ https_proxy | default(omit) }}"
-    no_proxy: "{{ no_proxy | default(omit) }}"
-  when: iac_package is defined
+- name: "Remove symbolic link for server"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_80"
+    state: absent
+
+- name: "Remove symbolic link for server"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_443"
+    state: absent
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
   vars:
-    iac_log_write: "Ensured {{ iac_package }} was installed"
-  when: iac_package is defined
+    iac_log_write: "Ensured {{ nginx_site.name }} was disabled"

@@ -1,0 +1,24 @@
+---
+###############################################################################
+#
+# uninstall.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "STATE: Ensure Nginx is stopped"
+  ansible.builtin.include_tasks: stopped.yml
+
+- name: "STATE: Ensure Nginx site is disabled"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "site_disabled"
+
+#- name: "STATE: Ensure Nginx sites are absent"
+#  ansible.builtin.include_tasks: loop_sites.yml
+#  vars:
+#    nginx_state: "site_absent"
+
+- name: "STATE: Ensure Nginx installation is absent"
+  ansible.builtin.include_tasks: absent.yml

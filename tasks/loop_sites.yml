@@ -22,7 +22,7 @@
 ###############################################################################
 
 - name: "Looping through sites"
-  ansible.builtin.include_tasks: "{{ state }}.yml"
+  ansible.builtin.include_tasks: "{{ nginx_state }}.yml"
   loop: "{{ nginx_sites }}"
   loop_control:
     loop_var: nginx_site

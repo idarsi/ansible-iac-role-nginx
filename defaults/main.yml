@@ -12,7 +12,7 @@ http_proxy: ""
 https_proxy: ""
 no_proxy: ""
 
-iac_service_key: "nginx"
+iac_service_name: "nginx"
 
 iac_supported_os:
   - { name: "Rocky", versions: ["8", "9", "10"] }

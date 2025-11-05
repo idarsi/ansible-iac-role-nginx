@@ -22,10 +22,10 @@
 
 - name: "Checking if service_key is found from variables"
   ansible.builtin.fail:
-    msg: "iac_blueprint.{{ iac_service_key }} is not defined"
+    msg: "iac_blueprint or iac_blueprint.nginx is not defined"
   when:
     - iac_blueprint is not defined
-    - iac_blueprint.{{ iac_service_key }} is not defined
+    - iac_blueprint.nginx is not defined
 
 ###############################################################################
 # SETTING VARIABLES
@@ -63,6 +63,14 @@
 # CHECKING STATES
 ###############################################################################
 
+- name: "STATE: Ensure Nginx installation and configuration is present"
+  ansible.builtin.include_tasks: install.yml
+  when: state == 'install'
+
+- name: "STATE: Ensure Nginx installation and configuration is absent"
+  ansible.builtin.include_tasks: uninstall.yml
+  when: state == 'uninstall'
+
 - name: "STATE: Ensure Nginx installation is present"
   ansible.builtin.include_tasks: present.yml
   when: state == 'present'
@@ -73,11 +81,27 @@
 
 - name: "STATE: Ensure Nginx sites are present"
   ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "{{ state }}"
   when: state == 'site_present'
+
+- name: "STATE: Ensure Nginx sites are absent"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "{{ state }}"
+  when: state == 'site_absent'
 
 - name: "STATE: Ensure Nginx site is enabled"
   ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "{{ state }}"
   when: state == 'site_enabled'
+
+- name: "STATE: Ensure Nginx site is disabled"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "{{ state }}"
+  when: state == 'site_disabled'
 
 - name: "STATE: Ensure Nginx is started"
   ansible.builtin.include_tasks: started.yml

@@ -1,0 +1,24 @@
+---
+###############################################################################
+#
+# install.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "STATE: Ensure Nginx installation is present"
+  ansible.builtin.include_tasks: present.yml
+
+- name: "STATE: Ensure Nginx sites are present"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "site_present"
+
+- name: "STATE: Ensure Nginx site is enabled"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_state: "site_enabled"
+
+- name: "STATE: Ensure Nginx is started"
+  ansible.builtin.include_tasks: started.yml
