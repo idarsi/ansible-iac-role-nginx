@@ -11,6 +11,8 @@ Overview
 
 This Ansible role is designed to simplify and enhance the flexibility of Nginx management.
 
+This role uses only ansible.builtin.* ansible modules and openssl and nginx cli commands.
+
 Supported Nginx version:
 - nginx-stable from Nginx repository
 
@@ -27,7 +29,8 @@ Stopping Nginx service          | stopped             |
 Requirements
 ------------
 
-- Operating system
+- Operating system (tested on)
+  - Red Hat Enterprise Linux 8
   - Rocky Linux 10
   - Rocky Linux 9
   - Rocky Linux 8
