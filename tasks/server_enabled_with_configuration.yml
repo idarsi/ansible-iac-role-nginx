@@ -30,8 +30,8 @@
 
 - name: "Create a symbolic link for server"
   ansible.builtin.file:
-    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_{{ nginx_server_port }}"
-    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_{{ nginx_server_port }}"
+    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
+    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     owner: root
     group: root
     state: link

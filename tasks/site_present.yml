@@ -13,6 +13,7 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
+    nginx_ssl_certificate_type: "{{ nginx_site.ssl_certificate_type | default(nginx_default_ssl_certificate_type) }}"
     nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_default_site_autoconfigure)) }}"
 
 - name: "Checking if required variables are defined"
@@ -26,13 +27,41 @@
 # CREATING CONFIGURATION IF AUTOCONFIGURATION IS TRUE
 ###############################################################################
 
-- name: "Configuring with autoconfiguration if it is enabled"
-  ansible.builtin.include_tasks: site_present_with_website.yml
-  when: nginx_autoconfigure == 'website'
+#- name: "Configuring with autoconfiguration if it is enabled"
+#  ansible.builtin.include_tasks: site_present_with_website.yml
+#  when: nginx_autoconfigure == 'website'
 
-- name: "Configuring with autoconfiguration if it is enabled"
-  ansible.builtin.include_tasks: site_present_with_proxy.yml
-  when: nginx_autoconfigure == 'proxy'
+#- name: "Configuring with autoconfiguration if it is enabled"
+#  ansible.builtin.include_tasks: site_present_with_proxy.yml
+#  when: nginx_autoconfigure == 'proxy'
+
+###############################################################################
+# CREATING SITE DIRECTORIES
+###############################################################################
+
+- name: "Ensuring www directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_www_directory }}/{{ nginx_site.name }}/html"
+    state: directory
+    mode: "0755"
+
+- name: "Ensuring www log directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_log_directory }}/{{ nginx_site.name }}"
+    state: directory
+    mode: "0755"
+
+###############################################################################
+# ENSURING THERE IS CERTIFICATE
+###############################################################################
+
+- name: "Checking for certificate"
+  ansible.builtin.include_tasks: certificate_present.yml
+  vars:
+    nginx_server_name: "{{ nginx_site.name }}"
+    nginx_ssl_certificate: "{{ nginx_public_key_directory }}/{{ nginx_site.name }}.crt"
+    nginx_ssl_certificate_key: "{{ nginx_private_key_directory }}/{{ nginx_site.name }}.key"
+  when: nginx_ssl_certificate_type == 'selfsigned'
 
 ###############################################################################
 # LOOPING THROUGH VIRTUAL HOSTS TO BE ADDED IF SERVERS EXIST

@@ -25,16 +25,8 @@
 
 - name: "Create a symbolic link for server"
   ansible.builtin.file:
-    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_80"
-    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_80"
-    owner: root
-    group: root
-    state: link
-
-- name: "Create a symbolic link for server"
-  ansible.builtin.file:
-    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_443"
-    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_443"
+    src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
+    dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     owner: root
     group: root
     state: link
