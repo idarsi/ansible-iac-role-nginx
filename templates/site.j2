@@ -1,0 +1,8 @@
+{% import "macros.j2" as n %}
+
+# {{ nginx_site.name }}
+
+{% for srv in nginx_site.servers %}
+{{ n.render_server(srv) }}
+
+{%- endfor -%}

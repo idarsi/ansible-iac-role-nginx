@@ -25,12 +25,12 @@
 
 - name: "Remove symbolic link for server"
   ansible.builtin.file:
-    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_80"
+    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     state: absent
 
 - name: "Remove symbolic link for server"
   ansible.builtin.file:
-    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}_443"
+    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     state: absent
 
 - name: "Writing log"

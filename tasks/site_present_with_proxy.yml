@@ -57,18 +57,10 @@
 # ENSURING VIRTUAL HOST IS CONFIGURED
 ###############################################################################
 
-- name: "Ensuring http to https redirect"
-  ansible.builtin.template:
-    src: "site_ssl_redirect_80.j2"
-    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_80"
-    owner: root
-    group: root
-    mode: "0644"
-
-- name: "Ensuring proxy configuration"
-  ansible.builtin.template:
-    src: "site_proxy_443.j2"
-    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_443"
-    owner: root
-    group: root
-    mode: "0644"
+#- name: "Ensuring http to https redirect"
+#  ansible.builtin.template:
+#    src: "site.j2"
+#    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
+#    owner: root
+#    group: root
+#    mode: "0644"

@@ -1,0 +1,44 @@
+{% macro render_value(v) -%}
+{%- if v is boolean -%}{{ 'on' if v else 'off' }}
+{%- elif v is number -%}{{ v }}
+{%- elif v is iterable and v is not string -%}{{ v | join(' ') }}
+{%- else -%}{{ v }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro render_directives(d) -%}
+{# d = dict direktiiveistä, vain "locations" ohitetaan #}
+{% for k, v in d.items() if k != 'locations' and v is not none %}
+{{ k }} {{ render_value(v) }};
+{% endfor %}
+{%- endmacro %}
+
+{% macro render_location(loc) %}
+{% if loc.autoconfigure is defined and loc.autoconfigure == 'proxy' %}
+location {{ loc.path | default('/') }} {
+    proxy_pass {{ loc.redirect_to }};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+{% else %}
+{# vapaamuotoinen location: kaikki avaimet paitsi path #}
+location {{ loc.path | default('/') }} {
+{% for k, v in loc.items() if k not in ['path'] and v is not none %}
+    {{ k }} {{ render_value(v) }};
+{% endfor %}
+}
+{% endif %}
+{% endmacro %}
+
+{% macro render_server(srv) %}
+server {
+{{ render_directives(srv) | indent(2, True) }}
+{% if srv.locations is defined and srv.locations %}
+{% for loc in srv.locations %}
+{{ render_location(loc) | indent(2, True) }}
+{% endfor %}
+{%- endif -%}
+}
+{% endmacro %}
