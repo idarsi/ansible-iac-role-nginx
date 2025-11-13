@@ -21,4 +21,3 @@
   ansible.builtin.include_tasks: log_write.yml
   vars:
     iac_log_write: "Started/restarted service nginx"
-  when: service_active.stdout == 'active'
