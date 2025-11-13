@@ -44,23 +44,6 @@
 # ENSURING VIRTUAL HOST IS CONFIGURED
 ###############################################################################
 
-#- name: "Rendering server configuration lines"
-#  ansible.builtin.set_fact:
-#    rendered_lines: |
-#      server {
-#      {% for item in nginx_server | dict2items if item.value is not none %}
-#        {{ item.key }} {{ item.value }};
-#      {% endfor %}
-#      }
-
-#- name: "Ensuring Nginx configuration matches template"
-#  ansible.builtin.copy:
-#    content: "{{ rendered_lines }}"
-#    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_{{ nginx_server_port }}"
-#    mode: "0640"
-#    owner: "root"
-#    group: "root"
-
 - name: "Ensuring http to https redirect"
   ansible.builtin.template:
     src: "site.j2"

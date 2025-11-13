@@ -45,17 +45,3 @@
   ansible.builtin.include_tasks: log_write.yml
   vars:
     iac_log_write: "Ensured {{ nginx_site.name }} was enabled"
-
-###############################################################################
-# ENSURING CONFIGURATION IS VALID
-###############################################################################
-
-- name: "Setting variables"
-  ansible.builtin.set_fact:
-    pg_cli_command: nginx -t
-
-- name: "Ensuring Nginx configuration is valid"
-  ansible.builtin.command: "{{ pg_cli_command }}"
-  register: my_output
-  failed_when: my_output.rc != 0
-  changed_when: my_output.rc == 0
