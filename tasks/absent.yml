@@ -21,6 +21,27 @@
   ansible.builtin.include_tasks: stopped.yml
 
 ###############################################################################
+# ENSURING CRONJOB CONFIGURATION
+###############################################################################
+
+- name: "Ensuring cron configuration is absent"
+  ansible.builtin.include_tasks: cron_absent.yml
+  when: iac_blueprint.nginx.cron is defined
+  vars:
+    iac_cron: "{{ iac_blueprint.nginx.cron | default([]) }}"
+
+###############################################################################
+# ENSURING FILESYSTEM CONFIGURATION
+###############################################################################
+
+- name: "Ensuring filesystem configuration is absent"
+  ansible.builtin.include_tasks: fs_absent.yml
+  when: iac_blueprint.nginx.directories is defined
+  vars:
+    iac_fs_directories: "{{ iac_blueprint.nginx.directories | default([]) }}"
+    iac_fs_files: "{{ iac_blueprint.nginx.files | default([]) }}"
+
+###############################################################################
 # ENSURING NGINX PACKAGE IS ABSENT
 ###############################################################################
 

@@ -75,4 +75,25 @@
 
 - name: "Ensuring correct SELinux context"
   ansible.builtin.command: restorecon -Rv {{ nginx_www_directory }}
-  when: ansible_virtualization_type not in ["docker", "podman", "lxc"]
+  when: ansible_facts["virtualization_type"] not in ["docker", "podman", "lxc"]
+
+###############################################################################
+# ENSURING FILESYSTEM CONFIGURATION
+###############################################################################
+
+- name: "Ensuring filesystem configuration is present"
+  ansible.builtin.include_tasks: fs_present.yml
+  when: iac_blueprint.nginx.directories is defined
+  vars:
+    iac_fs_directories: "{{ iac_blueprint.nginx.directories | default([]) }}"
+    iac_fs_files: "{{ iac_blueprint.nginx.files | default([]) }}"
+
+###############################################################################
+# ENSURING CRONJOB CONFIGURATION
+###############################################################################
+
+- name: "Ensuring cron configuration is present"
+  ansible.builtin.include_tasks: cron_present.yml
+  when: iac_blueprint.nginx.cron is defined
+  vars:
+    iac_cron: "{{ iac_blueprint.nginx.cron | default([]) }}"
