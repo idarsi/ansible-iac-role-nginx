@@ -79,6 +79,9 @@ iac_blueprint:
     files:
       - path: <file_path>
         content: <file_content>
+    binds:
+      - source: <real_directory_path>
+        target: <legacy_directory_path>
     cron:
       - name: <cron_name>
         job: <cron_job>
@@ -92,6 +95,16 @@ iac_blueprint:
         servers:                                          # direct server {} override configuration
           - key: <value>
 ```
+
+Shared filesystem helpers
+-------------------------
+
+This role supports `directories:`, `files:`, and `binds:` through the shared
+task library under `tasks/shared`.
+
+For the exact `binds:` record structure and examples, see:
+
+- `tasks/shared/README.md`
 
 A minimal working iac_blueprint that installs Nginx with one virtual host and uses autoconfigure.
 
