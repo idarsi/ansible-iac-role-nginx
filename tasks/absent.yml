@@ -34,9 +34,15 @@
 # ENSURING FILESYSTEM CONFIGURATION
 ###############################################################################
 
+- name: "Ensuring bind mount configuration is absent"
+  ansible.builtin.include_tasks: bind_absent.yml
+  when: (iac_blueprint.nginx.binds | default([])) | length > 0
+  vars:
+    iac_fs_binds: "{{ iac_blueprint.nginx.binds | default([]) }}"
+
 - name: "Ensuring filesystem configuration is absent"
   ansible.builtin.include_tasks: fs_absent.yml
-  when: iac_blueprint.nginx.directories is defined
+  when: (iac_blueprint.nginx.directories | default([])) | length > 0 or (iac_blueprint.nginx.files | default([])) | length > 0
   vars:
     iac_fs_directories: "{{ iac_blueprint.nginx.directories | default([]) }}"
     iac_fs_files: "{{ iac_blueprint.nginx.files | default([]) }}"
