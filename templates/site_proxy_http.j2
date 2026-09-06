@@ -1,0 +1,22 @@
+server {
+  listen 80;
+  server_name {{ nginx_site.name }};
+  location / {
+    proxy_pass {{ nginx_site.proxy_pass }};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+{% if nginx_render_locations | default(true) and nginx_site.locations is defined %}
+{% for location in nginx_site.locations %}
+  location {{ location.path }} {
+    proxy_pass {{ location.redirect_to | default(nginx_site.proxy_pass) }};
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+{% endfor %}
+{% endif %}
+}

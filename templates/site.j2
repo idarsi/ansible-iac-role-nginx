@@ -3,6 +3,6 @@
 # {{ nginx_site.name }}
 
 {% for srv in nginx_site.servers %}
-{{ n.render_server(srv) }}
+{{ n.render_server(srv, nginx_render_locations | default(true)) }}
 
 {%- endfor -%}

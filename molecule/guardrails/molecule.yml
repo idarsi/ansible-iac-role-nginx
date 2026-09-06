@@ -1,0 +1,26 @@
+---
+driver:
+  name: "podman"
+platforms:
+  - name: "rocky9"
+    image: "docker.io/rockylinux/rockylinux:9-ubi-init"
+    pre_build_image: true
+    privileged: true
+    command: "/usr/lib/systemd/systemd"
+    volumes:
+      - "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+provisioner:
+  name: "ansible"
+verifier:
+  name: "ansible"
+scenario:
+  # This scenario intentionally creates and destroys resources in one
+  # converge play to test ownership guardrails. Repeating that destructive
+  # fixture is not a meaningful idempotence check; stable idempotence is
+  # covered by validation and lifecycle.
+  test_sequence:
+    - "syntax"
+    - "create"
+    - "converge"
+    - "verify"
+    - "destroy"

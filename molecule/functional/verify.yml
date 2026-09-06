@@ -1,0 +1,202 @@
+---
+- name: "Verify Nginx configuration and local HTTP behavior"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Fail fast if the test-only backend is unavailable"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        test -s /var/tmp/nginx-functional-backend.pid
+        kill -0 "$(</var/tmp/nginx-functional-backend.pid)"
+        python3 -c 'import socket; socket.create_connection(("127.0.0.1", 8081), 1).close()'
+      args:
+        executable: "/bin/bash"
+      changed_when: false
+
+    - name: "Validate the complete Nginx configuration"
+      ansible.builtin.command: "nginx -t"
+      changed_when: false
+
+    - name: "Inspect the generated Nginx virtual-host configuration"
+      ansible.builtin.shell: "nginx -T 2>&1"
+      args:
+        executable: "/bin/bash"
+      changed_when: false
+      register: functional_nginx_config
+
+    - name: "Assert the functional virtual host has a proxy location"
+      ansible.builtin.assert:
+        that:
+          - "functional_nginx_config.stdout is search('server_name proxy\\.functional\\.example\\.org;')"
+          - "functional_nginx_config.stdout is search('location /backend-health \\{')"
+          - "functional_nginx_config.stdout is search('proxy_pass http://127\\.0\\.0\\.1:8081/health;')"
+        fail_msg: "The generated proxy virtual host is missing the expected SNI host or backend location."
+
+    - name: "Verify the repository uses secure defaults"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: functional_repo
+
+    - name: "Assert HTTPS and GPG repository settings"
+      ansible.builtin.assert:
+        that:
+          - "'baseurl=https://' in (functional_repo.content | b64decode)"
+          - "'gpgcheck=1' in (functional_repo.content | b64decode)"
+          - "'gpgkey=https://' in (functional_repo.content | b64decode)"
+          - "'sslverify=1' in (functional_repo.content | b64decode)"
+
+    - name: "Read the enabled Nginx repository state"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: functional_repo_state
+
+    - name: "Assert the Nginx repository remains enabled after convergence"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (functional_repo_state.content | b64decode) is search(
+            '(?im)^\\s*enabled(?:\\s*=\\s*|\\s*:\\s*|\\s{2,})(?:1|yes|true)\\s*(?:#.*)?$')
+
+    - name: "Check the private key permissions"
+      ansible.builtin.stat:
+        path: "/etc/pki/tls/private/functional.example.org.key"
+      register: functional_key
+
+    - name: "Assert the private key is restricted"
+      ansible.builtin.assert:
+        that:
+          - functional_key.stat.mode == "0600"
+          - functional_key.stat.pw_name == "root"
+          - functional_key.stat.gr_name == "root"
+
+    - name: "Check whether curl is available for SNI verification"
+      ansible.builtin.command:
+        argv:
+          - "curl"
+          - "--version"
+      changed_when: false
+      failed_when: false
+      register: functional_curl
+
+    - name: "Verify HTTPS reaches the test-only local reverse-proxy backend with SNI"
+      ansible.builtin.command:
+        argv:
+          - "curl"
+          - "--silent"
+          - "--show-error"
+          - "--fail"
+          - "--max-time"
+          - "10"
+          - "--resolve"
+          - "proxy.functional.example.org:443:127.0.0.1"
+          - "--cacert"
+          - "/etc/pki/tls/certs/proxy.functional.example.org.crt"
+          - "https://proxy.functional.example.org/backend-health"
+      changed_when: false
+      register: functional_proxy_response
+      when: functional_curl.rc == 0
+
+    - name: "Verify HTTPS proxy behavior with Python when curl is unavailable"
+      ansible.builtin.command:
+        argv:
+          - "python3"
+          - "-c"
+          - |
+            import socket
+            import ssl
+
+            host = "proxy.functional.example.org"
+            context = ssl.create_default_context(
+                cafile="/etc/pki/tls/certs/proxy.functional.example.org.crt"
+            )
+            with socket.create_connection(("127.0.0.1", 443), 10) as raw_socket:
+                with context.wrap_socket(raw_socket, server_hostname=host) as tls_socket:
+                    tls_socket.sendall(
+                        b"GET /backend-health HTTP/1.1\r\n"
+                        b"Host: proxy.functional.example.org\r\n"
+                        b"Connection: close\r\n\r\n"
+                    )
+                    response = tls_socket.makefile("rb").read()
+            headers, body = response.split(b"\r\n\r\n", 1)
+            if b" 200 " not in headers.splitlines()[0]:
+                raise SystemExit("The HTTPS proxy did not return HTTP 200")
+            print(body.decode(), end="")
+      changed_when: false
+      register: functional_proxy_python_response
+      when: functional_curl.rc != 0
+
+    - name: "Assert the reverse-proxy response came from the local backend"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (functional_proxy_response.stdout
+            if functional_curl.rc == 0
+            else functional_proxy_python_response.stdout) == "local-nginx-backend"
+
+    - name: "Verify HTTP redirects to HTTPS"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/"
+        headers:
+          Host: "functional.example.org"
+        follow_redirects: "none"
+        status_code: 301
+      register: functional_redirect
+
+    - name: "Assert the redirect target"
+      ansible.builtin.assert:
+        that: functional_redirect.location == "https://functional.example.org/"
+
+    - name: "Verify HTTPS serves the local site with SNI"
+      ansible.builtin.command:
+        argv:
+          - "curl"
+          - "--silent"
+          - "--show-error"
+          - "--fail"
+          - "--max-time"
+          - "10"
+          - "--resolve"
+          - "functional.example.org:443:127.0.0.1"
+          - "--cacert"
+          - "/etc/pki/tls/certs/functional.example.org.crt"
+          - "https://functional.example.org/"
+      changed_when: false
+      register: functional_site_response
+      when: functional_curl.rc == 0
+
+    - name: "Verify HTTPS site behavior with Python when curl is unavailable"
+      ansible.builtin.command:
+        argv:
+          - "python3"
+          - "-c"
+          - |
+            import socket
+            import ssl
+
+            host = "functional.example.org"
+            context = ssl.create_default_context(
+                cafile="/etc/pki/tls/certs/functional.example.org.crt"
+            )
+            with socket.create_connection(("127.0.0.1", 443), 10) as raw_socket:
+                with context.wrap_socket(raw_socket, server_hostname=host) as tls_socket:
+                    tls_socket.sendall(
+                        b"GET / HTTP/1.1\r\n"
+                        b"Host: functional.example.org\r\n"
+                        b"Connection: close\r\n\r\n"
+                    )
+            response = tls_socket.makefile("rb").read()
+            if b" 200 " not in response.split(b"\r\n", 1)[0]:
+                raise SystemExit("The HTTPS site did not return HTTP 200")
+            print(response.split(b"\r\n\r\n", 1)[1].decode(), end="")
+      changed_when: false
+      register: functional_site_python_response
+      when: functional_curl.rc != 0
+
+    - name: "Assert HTTPS serves the test-only website content"
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((functional_site_response.stdout
+            if functional_curl.rc == 0
+            else functional_site_python_response.stdout) | trim)
+            == "functional-nginx-site"

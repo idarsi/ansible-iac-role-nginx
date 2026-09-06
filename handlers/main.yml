@@ -1,0 +1,5 @@
+---
+- name: "Validate Nginx configuration"
+  ansible.builtin.command: "nginx -t"
+  changed_when: false
+  listen: "Validate Nginx configuration"

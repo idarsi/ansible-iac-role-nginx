@@ -15,8 +15,8 @@ no_proxy: ""
 iac_service_name: "nginx"
 
 iac_supported_os:
-  - { name: "Rocky", versions: ["8", "9", "10"] }
-  - { name: "RedHat", versions: ["8", "9", "10"] }
+  - { name: "Rocky", versions: ["9", "10"] }
+  - { name: "RedHat", versions: ["9", "10"] }
 
 ###############################################################################
 # DNF related configurations
@@ -33,6 +33,13 @@ iac_dnf_repo_name: "nginx-stable"
 
 # repository filepath
 iac_dnf_repo_path: "/etc/yum.repos.d/nginx.repo"
+# Legacy aliases retained for existing inventories.
+dnf_sslverify: true
+dnf_validate_certs: true
+dnf_disable_gpg_check: false
+iac_dnf_sslverify: "{{ dnf_sslverify }}"
+iac_dnf_validate_certs: "{{ dnf_validate_certs }}"
+iac_dnf_disable_gpg_check: "{{ dnf_disable_gpg_check }}"
 
 ###############################################################################
 # Ansible report on target host
@@ -50,3 +57,25 @@ nginx_certificate_public_key_days: 365
 
 nginx_default_site_autoconfigure: website
 nginx_default_ssl_certificate_type: selfsigned
+
+# Uninstall is deliberately opt-in because it can remove application data.
+nginx_uninstall_confirm: false
+nginx_uninstall_remove_config: false
+nginx_management_directory: "/var/lib/ansible-iac-role-nginx"
+nginx_management_marker: "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+nginx_management_manifest: "/var/lib/ansible-iac-role-nginx/manifest.yml"
+
+nginx_supported_states:
+  - "validate"
+  - "install"
+  - "present"
+  - "absent"
+  - "uninstall"
+  - "site_present"
+  - "site_absent"
+  - "site_enabled"
+  - "site_disabled"
+  - "location_present"
+  - "location_absent"
+  - "started"
+  - "stopped"

@@ -1,0 +1,21 @@
+---
+- name: "Build normalized Nginx location list"
+  ansible.builtin.set_fact:
+    nginx_blueprint_locations: >-
+      {{ nginx_blueprint_locations | default([]) +
+      (nginx_site_record.servers | default([]) | map(attribute='locations') |
+      select('defined') | list | flatten) +
+      (nginx_site_record.locations | default([])) }}
+  loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
+  loop_control:
+    loop_var: nginx_site_record
+
+- name: "Build normalized Nginx server list"
+  ansible.builtin.set_fact:
+    nginx_blueprint_servers: "{{ nginx_blueprint_servers | default([]) + (nginx_site_record.servers | default([])) }}"
+  loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
+  loop_control:
+    loop_var: nginx_site_record
+
+- name: "Validate the complete Nginx inventory"
+  ansible.builtin.include_tasks: validate_inventory.yml

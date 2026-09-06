@@ -16,6 +16,38 @@
   vars:
     iac_package: "dnf-plugins-core"
 
+- name: "Ensure the role management directory exists"
+  ansible.builtin.file:
+    path: "{{ nginx_management_directory }}"
+    state: "directory"
+    owner: root
+    group: root
+    mode: "0700"
+  when: not (nginx_etc_preexisting | bool)
+
+- name: "Write the role ownership marker"
+  ansible.builtin.copy:
+    content: "ansible-iac-role-nginx\n"
+    dest: "{{ nginx_management_marker }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not (nginx_etc_preexisting | bool)
+
+- name: "Write the role ownership manifest"
+  ansible.builtin.copy:
+    content: >-
+      {{ {'owner': 'ansible-iac-role-nginx', 'paths': [nginx_etc_directory],
+      'managed_files': [nginx_etc_directory + '/nginx.conf'], 'managed_links': [],
+      'managed_directories': [nginx_etc_directory, nginx_etc_directory + '/sites-available',
+      nginx_etc_directory + '/sites-enabled', nginx_www_directory, nginx_log_directory],
+      'managed_sites': []} | to_nice_yaml }}
+    dest: "{{ nginx_management_manifest }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not (nginx_etc_preexisting | bool)
+
 - name: "Ensuring openssl is installed"
   ansible.builtin.include_tasks: package_present.yml
   vars:
@@ -27,6 +59,22 @@
 
 - name: "Ensuring Nginx repositories are present"
   ansible.builtin.include_tasks: repo_present.yml
+
+- name: "Record the repository only when this role created it"
+  ansible.builtin.copy:
+    content: >-
+      {{ {'owner': 'ansible-iac-role-nginx', 'paths': [nginx_etc_directory, iac_dnf_repo_path],
+      'managed_files': [nginx_etc_directory + '/nginx.conf', iac_dnf_repo_path], 'managed_links': [],
+      'managed_directories': [nginx_etc_directory, nginx_etc_directory + '/sites-available',
+      nginx_etc_directory + '/sites-enabled', nginx_www_directory, nginx_log_directory],
+      'managed_sites': []} | to_nice_yaml }}
+    dest: "{{ nginx_management_manifest }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - nginx_repo_created_by_role | default(false) | bool
+    - not (nginx_etc_preexisting | bool)
 
 ###############################################################################
 # ENSURING NGINX PACKAGE IS PRESENT
@@ -48,6 +96,7 @@
     owner: root
     group: root
     mode: "0644"
+  notify: "Validate Nginx configuration"
 
 - name: "Ensuring sites-available directory exists"
   ansible.builtin.file:

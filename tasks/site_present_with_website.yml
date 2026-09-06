@@ -1,51 +1,22 @@
 ---
-###############################################################################
-#
-# site_present_with_autoconfiguration.yml
-#
-# @author Arsi Atomi
-#
-###############################################################################
-
-###############################################################################
-# SETTING VARIABLES
-###############################################################################
-
-- name: "Setting variables"
+- name: "Set website preset variables"
   ansible.builtin.set_fact:
-    nginx_autoconfigure: "{{ (nginx_site.autoconfigure | default(nginx_default_site_autoconfigure)) }}"
+    nginx_autoconfigure: "{{ nginx_site.autoconfigure | default(nginx_default_site_autoconfigure) }}"
     nginx_ssl_certificate_type: "{{ nginx_site.ssl_certificate_type | default(nginx_default_ssl_certificate_type) }}"
 
-- name: "Checking if required variables are defined"
-  ansible.builtin.assert:
-    that:
-      - nginx_autoconfigure is defined
-      - nginx_log_directory is defined
-      - nginx_site.name is defined
-      - nginx_www_directory is defined
-    fail_msg: "All tests did not pass"
-
-###############################################################################
-# CREATING SITE DIRECTORIES
-###############################################################################
-
-- name: "Ensuring www directory exists"
+- name: "Ensure website directories exist"
   ansible.builtin.file:
     path: "{{ nginx_www_directory }}/{{ nginx_site.name }}/html"
-    state: directory
+    state: "directory"
     mode: "0755"
 
-- name: "Ensuring www log directory exists"
+- name: "Ensure website log directory exists"
   ansible.builtin.file:
     path: "{{ nginx_log_directory }}/{{ nginx_site.name }}"
-    state: directory
+    state: "directory"
     mode: "0755"
 
-###############################################################################
-# ENSURING THERE IS CERTIFICATE
-###############################################################################
-
-- name: "Checking for certificate"
+- name: "Create the self-signed certificate when TLS is enabled"
   ansible.builtin.include_tasks: certificate_present.yml
   vars:
     nginx_server_name: "{{ nginx_site.name }}"
@@ -53,22 +24,21 @@
     nginx_ssl_certificate_key: "{{ nginx_private_key_directory }}/{{ nginx_site.name }}.key"
   when: nginx_ssl_certificate_type == 'selfsigned'
 
-###############################################################################
-# ENSURING VIRTUAL HOST IS CONFIGURED
-###############################################################################
-
-- name: "Ensuring http to https redirect"
+- name: "Render the website preset through the unified site path"
   ansible.builtin.template:
-    src: "site_ssl_redirect_80.j2"
-    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_80"
+    src: "{{ 'site_website_tls.j2' if nginx_ssl_certificate_type == 'selfsigned' else 'site_website_http.j2' }}"
+    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
     owner: root
     group: root
     mode: "0644"
+  notify: "Validate Nginx configuration"
 
-- name: "Ensuring proxy configuration"
-  ansible.builtin.template:
-    src: "site_website_443.j2"
-    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_443"
-    owner: root
-    group: root
-    mode: "0644"
+- name: "Remove legacy split website preset files"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_{{ nginx_legacy_suffix }}"
+    state: "absent"
+  loop:
+    - "80"
+    - "443"
+  loop_control:
+    loop_var: nginx_legacy_suffix

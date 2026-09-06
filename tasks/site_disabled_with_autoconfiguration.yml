@@ -1,39 +1,5 @@
 ---
-###############################################################################
-#
-# server_disabled_with_autoconfiguration.yml
-#
-# @author Arsi Atomi
-#
-###############################################################################
-
-###############################################################################
-# SETTING VARIABLES
-###############################################################################
-
-- name: "Checking if required variables are defined"
-  ansible.builtin.assert:
-    that:
-      - nginx_autoconfigure is defined
-      - nginx_etc_directory is defined
-      - nginx_site.name is defined
-    fail_msg: "All tests did not pass"
-
-###############################################################################
-# ENSURING SERVER IS ENABLED
-###############################################################################
-
-- name: "Remove symbolic link for server"
+- name: "Disable the autoconfigured site through the unified path"
   ansible.builtin.file:
     path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
-    state: absent
-
-- name: "Remove symbolic link for server"
-  ansible.builtin.file:
-    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
-    state: absent
-
-- name: "Writing log"
-  ansible.builtin.include_tasks: log_write.yml
-  vars:
-    iac_log_write: "Ensured {{ nginx_site.name }} was disabled"
+    state: "absent"

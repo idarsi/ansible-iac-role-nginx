@@ -36,10 +36,12 @@
 
 - name: "Looping through servers"
   ansible.builtin.include_tasks: "server_disabled.yml"
-  loop: "{{ nginx_site.servers }}"
+  loop: "{{ nginx_site.servers | default([]) }}"
   loop_control:
-    loop_var: nginx_server
-  when: nginx_site.servers is defined
+    loop_var: nginx_server_record
+  when: (nginx_site.servers | default([]) | length) > 0
+  vars:
+    nginx_server: "{{ nginx_server_record }}"
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml

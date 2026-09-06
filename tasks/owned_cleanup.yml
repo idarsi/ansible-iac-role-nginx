@@ -1,0 +1,96 @@
+---
+- name: "Check the role ownership marker and manifest"
+  ansible.builtin.stat:
+    path: "{{ nginx_ownership_path }}"
+  loop:
+    - "{{ nginx_management_marker }}"
+    - "{{ nginx_management_manifest }}"
+  loop_control:
+    loop_var: nginx_ownership_path
+  register: nginx_ownership_files
+
+- name: "Require role ownership before destructive cleanup"
+  ansible.builtin.assert:
+    that:
+      - nginx_ownership_files.results[0].stat.exists
+      - nginx_ownership_files.results[1].stat.exists
+    fail_msg: "Refusing cleanup: the Nginx ownership marker or manifest is missing."
+
+- name: "Read the role ownership files"
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ nginx_management_manifest }}"
+    - "{{ nginx_management_marker }}"
+  loop_control:
+    loop_var: nginx_ownership_file
+  register: nginx_ownership_raw
+
+- name: "Validate the ownership manifest"
+  ansible.builtin.assert:
+    that:
+      - nginx_manifest_data.owner == 'ansible-iac-role-nginx'
+      - nginx_manifest_data.managed_files is sequence
+      - nginx_manifest_data.managed_links is sequence
+      - nginx_manifest_data.managed_directories is sequence
+      - nginx_manifest_data.managed_files is not string
+      - nginx_manifest_data.managed_links is not string
+      - nginx_manifest_data.managed_directories is not string
+      - >-
+        nginx_manifest_data.managed_files |
+        select('match', '^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$') | list | length ==
+        nginx_manifest_data.managed_files | length
+      - >-
+        nginx_manifest_data.managed_links |
+        select('match', '^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$') | list | length ==
+        nginx_manifest_data.managed_links | length
+      - >-
+        nginx_manifest_data.managed_directories |
+        select('match', '^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$') | list | length ==
+        nginx_manifest_data.managed_directories | length
+      - nginx_manifest_data.managed_directories | reject('equalto', '/') | list | length == nginx_manifest_data.managed_directories | length
+      - nginx_ownership_raw.results[1].content | b64decode | trim == 'ansible-iac-role-nginx'
+    fail_msg: "Refusing cleanup: the ownership manifest is invalid or unsafe."
+  vars:
+    nginx_manifest_data: "{{ nginx_ownership_raw.results[0].content | b64decode | from_yaml }}"
+
+- name: "Remove only manifest-owned files and links"
+  ansible.builtin.file:
+    path: "{{ nginx_owned_file }}"
+    state: "absent"
+  loop: >-
+    {{ (nginx_ownership_raw.results[0].content | b64decode | from_yaml).managed_files +
+    (nginx_ownership_raw.results[0].content | b64decode | from_yaml).managed_links }}
+  loop_control:
+    loop_var: nginx_owned_file
+
+- name: "Check manifest-owned directories"
+  ansible.builtin.stat:
+    path: "{{ nginx_owned_directory }}"
+  loop: "{{ (nginx_ownership_raw.results[0].content | b64decode | from_yaml).managed_directories }}"
+  loop_control:
+    loop_var: nginx_owned_directory
+  register: nginx_owned_directory_stats
+
+- name: "Remove manifest-owned directories only when empty"
+  ansible.builtin.command:
+    argv:
+      - "rmdir"
+      - "{{ nginx_owned_directory_stat.item }}"
+  loop: "{{ nginx_owned_directory_stats.results }}"
+  loop_control:
+    loop_var: nginx_owned_directory_stat
+  when:
+    - nginx_owned_directory_stat.stat.exists
+    - nginx_owned_directory_stat.stat.isdir
+  register: nginx_directory_removal
+  changed_when: nginx_directory_removal.rc == 0
+  failed_when: false
+
+- name: "Remove the ownership marker and manifest"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: "absent"
+  loop:
+    - "{{ nginx_management_marker }}"
+    - "{{ nginx_management_manifest }}"

@@ -1,0 +1,18 @@
+---
+- name: "Read the existing role ownership manifest"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_manifest }}"
+  register: nginx_site_manifest_raw
+
+- name: "Normalize the existing site ownership list"
+  ansible.builtin.set_fact:
+    nginx_site_manifest_data: "{{ nginx_site_manifest_raw.content | b64decode | from_yaml }}"
+    nginx_site_managed_sites: "{{ (nginx_site_manifest_raw.content | b64decode | from_yaml).managed_sites | default([]) + [nginx_site.name] }}"
+
+- name: "Update the role ownership manifest with the site"
+  ansible.builtin.copy:
+    content: "{{ nginx_site_manifest_data | combine({'managed_sites': nginx_site_managed_sites | unique | list}) | to_nice_yaml }}"
+    dest: "{{ nginx_management_manifest }}"
+    owner: root
+    group: root
+    mode: "0600"

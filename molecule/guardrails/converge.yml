@@ -1,0 +1,331 @@
+---
+- name: "Verify uninstall confirmation guardrail"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Create an external repository fixture"
+      ansible.builtin.copy:
+        content: "# externally managed repository\n"
+        dest: "/etc/yum.repos.d/nginx.repo"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "Create an externally managed site fixture"
+      ansible.builtin.file:
+        path: "/etc/nginx/{{ item }}"
+        state: "directory"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "sites-available"
+        - "sites-enabled"
+
+    - name: "Write the externally managed site configuration"
+      ansible.builtin.copy:
+        content: "# externally managed site\n"
+        dest: "/etc/nginx/sites-available/external.example.org"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "Create the externally managed site link"
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/external.example.org"
+        dest: "/etc/nginx/sites-enabled/external.example.org"
+        state: "link"
+
+    - name: "Capture preflight filesystem state"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "/etc/nginx"
+        - "/etc/yum.repos.d/nginx.repo"
+        - "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+      register: guardrail_before
+
+    - name: "Run uninstall with an unconfirmed destructive request"
+      block:
+        - name: "Invoke the role"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "UNINSTALL"
+            iac_blueprint:
+              nginx:
+                sites: []
+      rescue:
+        - name: "Record the expected rejection"
+          ansible.builtin.set_fact:
+            guardrail_failed: true
+            guardrail_message: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: "Capture postflight filesystem state"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "/etc/nginx"
+        - "/etc/yum.repos.d/nginx.repo"
+        - "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+      register: guardrail_after
+
+    - name: "Verify the expected guardrail error and no mutation"
+      ansible.builtin.assert:
+        that:
+          - guardrail_failed | default(false)
+          - "'state=uninstall is destructive' in guardrail_message"
+          - >-
+            guardrail_before.results | map(attribute='stat.exists') | list ==
+            guardrail_after.results | map(attribute='stat.exists') | list
+
+    - name: "Run absent without role ownership"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "absent"
+        iac_blueprint:
+          nginx:
+            sites: []
+
+    - name: "Read the externally managed repository"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: external_repo_after
+
+    - name: "Verify absent preserved the external repository"
+      ansible.builtin.assert:
+        that: "external_repo_after.content | b64decode | trim == '# externally managed repository'"
+
+    - name: "Run site_absent without site ownership"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_absent"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "external.example.org"
+                autoconfigure: "none"
+                ssl_certificate_type: "none"
+                servers: []
+
+    - name: "Read the externally managed site configuration"
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/external.example.org"
+      register: external_site_after
+
+    - name: "Check the externally managed site link"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/external.example.org"
+      register: external_site_link_after
+
+    - name: "Verify site_absent preserved the external site"
+      ansible.builtin.assert:
+        that:
+          - external_site_after.content | b64decode | trim == '# externally managed site'
+          - external_site_link_after.stat.islnk
+
+    - name: "Create an ownership manifest fixture for absent guardrails"
+      ansible.builtin.file:
+        path: "/var/lib/ansible-iac-role-nginx"
+        state: "directory"
+        mode: "0700"
+    - name: "Write the ownership manifest fixture for absent guardrails"
+      ansible.builtin.copy:
+        content: >-
+          {{ {'owner': 'ansible-iac-role-nginx', 'paths': ['/etc/nginx'],
+          'managed_sites': []} | to_nice_yaml }}
+        dest: "/var/lib/ansible-iac-role-nginx/manifest.yml"
+        mode: "0600"
+    - name: "Write an incorrect ownership marker"
+      ansible.builtin.copy:
+        content: "another-role\n"
+        dest: "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+        mode: "0600"
+    - name: "Capture package state before wrong-marker absent"
+      ansible.builtin.package_facts:
+        manager: "auto"
+    - name: "Remember package state before wrong-marker absent"
+      ansible.builtin.set_fact:
+        wrong_marker_nginx_present: "{{ 'nginx' in (ansible_facts.packages | default({})) }}"
+    - name: "Run absent with an incorrect ownership marker"
+      block:
+        - name: "Invoke absent with the incorrect marker"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "absent"
+            iac_blueprint:
+              nginx:
+                sites: []
+      rescue:
+        - name: "Record incorrect-marker rejection"
+          ansible.builtin.set_fact:
+            wrong_marker_failed: true
+            wrong_marker_message: "{{ ansible_failed_result.msg | default('') }}"
+    - name: "Capture package state after wrong-marker absent"
+      ansible.builtin.package_facts:
+        manager: "auto"
+    - name: "Verify wrong marker blocked absent without mutation"
+      ansible.builtin.assert:
+        that:
+          - wrong_marker_failed | default(false)
+          - "'Refusing absent state: the ownership marker or manifest is invalid or unsafe.' in wrong_marker_message"
+          - (('nginx' in ansible_facts.packages) == wrong_marker_nginx_present)
+
+    - name: "Write the correct ownership marker before corrupt-manifest test"
+      ansible.builtin.copy:
+        content: "ansible-iac-role-nginx\n"
+        dest: "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+        mode: "0600"
+    - name: "Write a corrupt ownership manifest"
+      ansible.builtin.copy:
+        content: "owner: ansible-iac-role-nginx\npaths: {unexpected: value}\nmanaged_sites: []\n"
+        dest: "/var/lib/ansible-iac-role-nginx/manifest.yml"
+        mode: "0600"
+    - name: "Run absent with a corrupt ownership manifest"
+      block:
+        - name: "Invoke absent with the corrupt manifest"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "absent"
+            iac_blueprint:
+              nginx:
+                sites: []
+      rescue:
+        - name: "Record corrupt-manifest rejection"
+          ansible.builtin.set_fact:
+            corrupt_manifest_failed: true
+            corrupt_manifest_message: "{{ ansible_failed_result.msg | default('') }}"
+    - name: "Verify corrupt manifest blocked absent"
+      ansible.builtin.assert:
+        that:
+          - corrupt_manifest_failed | default(false)
+          - "'Refusing absent state: the ownership marker or manifest is invalid or unsafe.' in corrupt_manifest_message"
+    - name: "Read the repository after absent guardrail failures"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: absent_guardrail_repo
+    - name: "Verify absent guardrails preserved the repository"
+      ansible.builtin.assert:
+        that:
+          - absent_guardrail_repo.content | b64decode | trim == '# externally managed repository'
+
+    - name: "Create a valid role ownership marker for uninstall testing"
+      ansible.builtin.file:
+        path: "/var/lib/ansible-iac-role-nginx"
+        state: "directory"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: "Write the uninstall test ownership marker"
+      ansible.builtin.copy:
+        content: "ansible-iac-role-nginx\n"
+        dest: "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: "Write the uninstall test ownership manifest"
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'owner': 'ansible-iac-role-nginx',
+            'paths': ['/etc/nginx'],
+            'managed_files': ['/etc/nginx/nginx.conf'],
+            'managed_links': [],
+            'managed_directories': ['/etc/nginx', '/etc/nginx/sites-available', '/etc/nginx/sites-enabled'],
+            'managed_sites': ['managed.example.org']
+          } | to_nice_yaml }}
+        dest: "/var/lib/ansible-iac-role-nginx/manifest.yml"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: "Write the manifest-owned site configuration"
+      ansible.builtin.copy:
+        content: "# role-managed site\n"
+        dest: "/etc/nginx/sites-available/managed.example.org"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "Create the manifest-owned site link"
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/managed.example.org"
+        dest: "/etc/nginx/sites-enabled/managed.example.org"
+        state: "link"
+
+    - name: "Create an unmanaged nested file below a manifest-owned directory"
+      ansible.builtin.copy:
+        content: "# must survive owned cleanup\n"
+        dest: "/etc/nginx/sites-available/unmanaged-nested.conf"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "Uninstall with a blueprint containing owned and external sites"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "uninstall"
+        nginx_uninstall_confirm: true
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "managed.example.org"
+                autoconfigure: "none"
+                ssl_certificate_type: "none"
+                servers: []
+              - name: "external.example.org"
+                autoconfigure: "none"
+                ssl_certificate_type: "none"
+                servers: []
+
+    - name: "Check the external site after uninstall"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/external.example.org"
+      register: external_site_uninstall_link
+
+    - name: "Check the managed site after uninstall"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/managed.example.org"
+      register: managed_site_uninstall_link
+
+    - name: "Verify uninstall site ownership filtering"
+      ansible.builtin.assert:
+        that:
+          - external_site_uninstall_link.stat.islnk
+          - not managed_site_uninstall_link.stat.exists
+
+    - name: "Check the unmanaged nested file after owned cleanup"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-available/unmanaged-nested.conf"
+      register: unmanaged_nested_file_after
+
+    - name: "Verify owned cleanup preserved the unmanaged nested file"
+      ansible.builtin.assert:
+        that:
+          - unmanaged_nested_file_after.stat.exists
+
+    - name: "Persist guardrail verification for the verifier play"
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'failed': guardrail_failed | default(false),
+            'message': guardrail_message | default(''),
+            'before': guardrail_before.results | map(attribute='stat.exists') | list,
+            'after': guardrail_after.results | map(attribute='stat.exists') | list,
+            'external_repo_preserved': external_repo_after.content | b64decode | trim == '# externally managed repository',
+             'external_site_preserved': (external_site_after.content | b64decode | trim == '# externally managed site') and external_site_link_after.stat.islnk,
+             'external_site_uninstall_preserved': external_site_uninstall_link.stat.islnk and not managed_site_uninstall_link.stat.exists,
+             'unmanaged_nested_file_preserved': unmanaged_nested_file_after.stat.exists,
+             'wrong_marker_failed': wrong_marker_failed | default(false),
+             'corrupt_manifest_failed': corrupt_manifest_failed | default(false),
+             'absent_guardrail_repo_preserved': absent_guardrail_repo.content | b64decode | trim == '# externally managed repository'
+          } | to_nice_yaml }}
+        dest: "/var/tmp/nginx-guardrail-result.yml"
+        mode: "0600"

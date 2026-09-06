@@ -51,6 +51,7 @@
     owner: root
     group: root
     mode: "0644"
+  notify: "Validate Nginx configuration"
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml

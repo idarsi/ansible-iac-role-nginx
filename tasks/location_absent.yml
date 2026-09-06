@@ -1,0 +1,31 @@
+---
+- name: "Validate the site selected for location removal"
+  ansible.builtin.assert:
+    that:
+      - nginx_site is mapping
+      - nginx_site.name is defined
+    fail_msg: "A site record is required to remove its locations."
+
+- name: "Remove locations from an autoconfigured website safely"
+  ansible.builtin.include_tasks: site_present_with_website.yml
+  vars:
+    nginx_render_locations: false
+  when: nginx_site.autoconfigure | default(nginx_default_site_autoconfigure) == 'website'
+
+- name: "Remove locations from an autoconfigured proxy safely"
+  ansible.builtin.include_tasks: site_present_with_proxy.yml
+  vars:
+    nginx_render_locations: false
+  when: nginx_site.autoconfigure | default(nginx_default_site_autoconfigure) == 'proxy'
+
+- name: "Render a manual site without location blocks"
+  ansible.builtin.template:
+    src: "site.j2"
+    dest: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    nginx_render_locations: false
+  when: nginx_site.autoconfigure | default(nginx_default_site_autoconfigure) == 'none'
+  notify: "Validate Nginx configuration"

@@ -1,0 +1,37 @@
+---
+- name: "Verify persisted guardrail results"
+  hosts: "all"
+  gather_facts: false
+  tasks:
+    - name: "Read the converge result"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-guardrail-result.yml"
+      register: guardrail_result_file
+
+    - name: "Decode the persisted guardrail result"
+      ansible.builtin.set_fact:
+        guardrail_result: "{{ guardrail_result_file.content | b64decode | from_yaml }}"
+
+    - name: "Normalize persisted guardrail booleans"
+      ansible.builtin.set_fact:
+        guardrail_failed: "{{ guardrail_result.failed | string | lower == 'true' }}"
+        guardrail_external_repo_preserved: "{{ guardrail_result.external_repo_preserved | string | lower == 'true' }}"
+        guardrail_external_site_preserved: "{{ guardrail_result.external_site_preserved | string | lower == 'true' }}"
+        guardrail_external_site_uninstall_preserved: "{{ guardrail_result.external_site_uninstall_preserved | string | lower == 'true' }}"
+        guardrail_wrong_marker_failed: "{{ guardrail_result.wrong_marker_failed | string | lower == 'true' }}"
+        guardrail_corrupt_manifest_failed: "{{ guardrail_result.corrupt_manifest_failed | string | lower == 'true' }}"
+        guardrail_absent_guardrail_repo_preserved: "{{ guardrail_result.absent_guardrail_repo_preserved | string | lower == 'true' }}"
+
+    - name: "Assert expected error and no mutation"
+      ansible.builtin.assert:
+        that:
+          - guardrail_failed is sameas true
+          - "'state=uninstall is destructive' in guardrail_result.message"
+          - guardrail_result.before == guardrail_result.after
+          - guardrail_external_repo_preserved is sameas true
+          - guardrail_external_site_preserved is sameas true
+          - guardrail_external_site_uninstall_preserved is sameas true
+          - guardrail_result.unmanaged_nested_file_preserved | string | lower == 'true'
+          - guardrail_wrong_marker_failed is sameas true
+          - guardrail_corrupt_manifest_failed is sameas true
+          - guardrail_absent_guardrail_repo_preserved is sameas true

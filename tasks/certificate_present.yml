@@ -34,11 +34,24 @@
     pg_cli_command: "openssl genrsa -out {{ nginx_ssl_certificate_key }}"
 
 - name: "Ensuring certificate private key exists if needed"
-  ansible.builtin.command: "{{ pg_cli_command }}"
+  ansible.builtin.command:
+    argv:
+      - "openssl"
+      - "genrsa"
+      - "-out"
+      - "{{ nginx_ssl_certificate_key }}"
   register: my_output
   failed_when: my_output.rc != 0
   changed_when: my_output.rc == 0
   when: not nginx_key_file.stat.exists
+  no_log: true
+
+- name: "Restrict certificate private key permissions"
+  ansible.builtin.file:
+    path: "{{ nginx_ssl_certificate_key }}"
+    owner: root
+    group: root
+    mode: "0600"
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
@@ -55,11 +68,26 @@
       -subj "/CN={{ nginx_server_name }}"
 
 - name: "Ensuring certificate public key exists if needed"
-  ansible.builtin.command: "{{ pg_cli_command }}"
+  ansible.builtin.command:
+    argv:
+      - "openssl"
+      - "req"
+      - "-new"
+      - "-x509"
+      - "-nodes"
+      - "-key"
+      - "{{ nginx_ssl_certificate_key }}"
+      - "-out"
+      - "{{ nginx_ssl_certificate }}"
+      - "-days"
+      - "{{ nginx_certificate_public_key_days | string }}"
+      - "-subj"
+      - "/CN={{ nginx_server_name }}"
   register: my_output
   failed_when: my_output.rc != 0
   changed_when: my_output.rc == 0
   when: not nginx_crt_file.stat.exists
+  no_log: true
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml

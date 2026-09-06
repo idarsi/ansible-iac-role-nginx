@@ -1,0 +1,91 @@
+---
+- name: "Validate the site selected for removal"
+  ansible.builtin.assert:
+    that:
+      - nginx_site is mapping
+      - nginx_site.name is defined
+      - nginx_site.name is string
+      - nginx_site.name is match('^[A-Za-z0-9.-]+$')
+      - nginx_site.name not in ['.', '..']
+    fail_msg: "A safe site record is required to remove a site."
+
+- name: "Check the site ownership marker"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_marker }}"
+  register: nginx_site_marker_stat
+
+- name: "Check the site ownership manifest"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_manifest }}"
+  register: nginx_site_manifest_stat
+
+- name: "Read the site ownership manifest"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_manifest }}"
+  register: nginx_site_manifest_raw
+  when:
+    - nginx_site_marker_stat.stat.exists
+    - nginx_site_manifest_stat.stat.exists
+
+- name: "Validate the site ownership manifest before removal"
+  ansible.builtin.assert:
+    that:
+      - nginx_site_manifest_data.owner == 'ansible-iac-role-nginx'
+      - nginx_site_manifest_data.paths is sequence
+      - nginx_site_manifest_data.paths | select('match', '^/[^/].*') | list | length == nginx_site_manifest_data.paths | length
+      - nginx_site_manifest_data.managed_sites is sequence
+      - nginx_site_manifest_data.managed_sites | select('match', '^[A-Za-z0-9.-]+$') | list | length == nginx_site_manifest_data.managed_sites | length
+    fail_msg: "Refusing site removal: the ownership manifest is invalid or unsafe."
+  vars:
+    nginx_site_manifest_data: "{{ nginx_site_manifest_raw.content | b64decode | from_yaml }}"
+  when:
+    - nginx_site_marker_stat.stat.exists
+    - nginx_site_manifest_stat.stat.exists
+
+- name: "Determine whether the role owns this site"
+  ansible.builtin.set_fact:
+    nginx_site_owned: false
+
+- name: "Mark the site as role-owned when the manifest contains it"
+  ansible.builtin.set_fact:
+    nginx_site_owned: true
+  when:
+    - nginx_site_marker_stat.stat.exists
+    - nginx_site_manifest_stat.stat.exists
+    - nginx_site.name in ((nginx_site_manifest_raw.content | b64decode | from_yaml).managed_sites | default([]))
+
+- name: "Remove the role-owned site enablement link"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
+    state: "absent"
+  when: nginx_site_owned | bool
+
+- name: "Remove the role-owned site configuration"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
+    state: "absent"
+  when: nginx_site_owned | bool
+
+- name: "Remove legacy role-owned split site configurations"
+  ansible.builtin.file:
+    path: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_{{ nginx_legacy_suffix }}"
+    state: "absent"
+  loop:
+    - "80"
+    - "443"
+  loop_control:
+    loop_var: nginx_legacy_suffix
+  when: nginx_site_owned | bool
+
+- name: "Remove the site from the ownership manifest"
+  ansible.builtin.copy:
+    content: >-
+      {{ (nginx_site_manifest_raw.content | b64decode | from_yaml) |
+      combine({'managed_sites': ((nginx_site_manifest_raw.content | b64decode |
+      from_yaml).managed_sites | default([]) | difference([nginx_site.name]))}) |
+      to_nice_yaml }}
+    dest: "{{ nginx_management_manifest }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: nginx_site_owned | bool

@@ -1,0 +1,364 @@
+---
+- name: "Verify Nginx lifecycle state transitions"
+  hosts: "all"
+  gather_facts: true
+  vars:
+    lifecycle_blueprint:
+      nginx:
+        sites:
+          - name: "example.org"
+            autoconfigure: "none"
+            ssl_certificate_type: "none"
+            servers:
+              - listen: "8080"
+                server_name: "example.org"
+                locations:
+                  - path: "/healthz"
+                    return: "200 ok"
+  tasks:
+    - name: "Read the site before location removal"
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/example.org"
+      register: site_with_location
+
+    - name: "Remove declared locations"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "location_absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Read the site after location removal"
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/example.org"
+      register: site_without_location
+
+    - name: "Verify location removal"
+      ansible.builtin.assert:
+        that:
+          - "'/healthz' in (site_with_location.content | b64decode)"
+          - "'/healthz' not in (site_without_location.content | b64decode)"
+
+    - name: "Persist the first location-removal observable"
+      ansible.builtin.copy:
+        content: "{{ site_without_location.content | b64decode }}"
+        dest: "/var/tmp/nginx-lifecycle-site-without-location"
+        mode: "0600"
+
+    - name: "Repeat location removal to verify the transition is idempotent"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "location_absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Read the site after repeated location removal"
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/example.org"
+      register: site_without_location_repeat
+
+    - name: "Read the persisted location-removal observable"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-lifecycle-site-without-location"
+      register: persisted_site_without_location
+
+    - name: "Verify repeated location removal has the same observable result"
+      ansible.builtin.assert:
+        that:
+          - site_without_location.content == site_without_location_repeat.content
+          - persisted_site_without_location.content == site_without_location_repeat.content
+
+    - name: "Remove the complete installation through public absent state"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Verify public absent removed the package"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Assert public absent observable result"
+      ansible.builtin.assert:
+        that:
+          - "'nginx' not in ansible_facts.packages"
+
+    - name: "Capture public absent result"
+      ansible.builtin.stat:
+        path: "{{ lifecycle_absent_path }}"
+      loop:
+        - "/var/www/example.org/html"
+      loop_control:
+        loop_var: lifecycle_absent_path
+      register: lifecycle_absent_after_first
+
+    - name: "Repeat public absent to verify the absent transition is idempotent"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Verify repeated public absent remains absent"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Capture repeated public absent result"
+      ansible.builtin.stat:
+        path: "{{ lifecycle_absent_path }}"
+      loop:
+        - "/var/www/example.org/html"
+      loop_control:
+        loop_var: lifecycle_absent_path
+      register: lifecycle_absent_after_second
+
+    - name: "Assert public absent transition and repetition observables"
+      ansible.builtin.assert:
+        that:
+          - "'nginx' not in ansible_facts.packages"
+          - lifecycle_absent_after_first.results | map(attribute='stat.exists') | list == [true]
+          - lifecycle_absent_after_second.results | map(attribute='stat.exists') | list == [true]
+          - >-
+            lifecycle_absent_after_first.results | map(attribute='stat.exists') | list ==
+            lifecycle_absent_after_second.results | map(attribute='stat.exists') | list
+
+    - name: "Restore the installation after public absent"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Remove the site"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Capture site_absent observables after the first run"
+      ansible.builtin.stat:
+        path: "{{ lifecycle_site_absent_path }}"
+      loop:
+        - "/etc/nginx/sites-available/example.org"
+        - "/etc/nginx/sites-enabled/example.org"
+        - "/var/www/example.org/html"
+      loop_control:
+        loop_var: lifecycle_site_absent_path
+      register: lifecycle_site_absent_after_first
+
+    - name: "Repeat site_absent to verify the absent transition is idempotent"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_absent"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      register: lifecycle_site_absent_second
+
+    - name: "Capture site_absent observables after the repeated run"
+      ansible.builtin.stat:
+        path: "{{ lifecycle_site_absent_path }}"
+      loop:
+        - "/etc/nginx/sites-available/example.org"
+        - "/etc/nginx/sites-enabled/example.org"
+        - "/var/www/example.org/html"
+      loop_control:
+        loop_var: lifecycle_site_absent_path
+      register: lifecycle_site_absent_after_second
+
+    - name: "Verify site removal"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_site_absent_after_first.results | map(attribute='stat.exists') | list == [false, false, true]
+          - lifecycle_site_absent_after_second.results | map(attribute='stat.exists') | list == [false, false, true]
+          - >-
+            lifecycle_site_absent_after_first.results | map(attribute='stat.exists') | list ==
+            lifecycle_site_absent_after_second.results | map(attribute='stat.exists') | list
+
+    - name: "Restore the site"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_present"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Capture present-state observables before the first convergence"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-available/example.org"
+        checksum_algorithm: "sha256"
+      register: lifecycle_present_before
+
+    - name: "Converge the complete public present state again"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "present"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Capture present-state observables after the first convergence"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-available/example.org"
+        checksum_algorithm: "sha256"
+      register: lifecycle_present_after_first
+
+    - name: "Repeat present to verify the present transition is idempotent"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "present"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Check the repeated present state"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-available/example.org"
+        checksum_algorithm: "sha256"
+      register: lifecycle_present_after_repeat
+
+    - name: "Assert repeated present state has identical observables"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_present_before.stat.exists
+          - lifecycle_present_after_first.stat.exists
+          - lifecycle_present_after_repeat.stat.exists
+          - lifecycle_present_before.stat.checksum == lifecycle_present_after_first.stat.checksum
+          - lifecycle_present_after_first.stat.checksum == lifecycle_present_after_repeat.stat.checksum
+          - lifecycle_present_after_repeat.stat.checksum is defined
+
+    - name: "Restore declared locations"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "location_present"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Disable the manual site"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_disabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Check that disable removed the unified link"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/example.org"
+      register: site_disabled_result
+
+    - name: "Verify that the manual site is disabled"
+      ansible.builtin.assert:
+        that: not site_disabled_result.stat.exists
+
+    - name: "Enable the manual site"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_enabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Read the restored managed site"
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/example.org"
+      register: lifecycle_site
+
+    - name: "Check the final enabled symlink"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/example.org"
+      register: lifecycle_link
+
+    - name: "Verify final location and enablement"
+      ansible.builtin.assert:
+        that:
+          - "'/healthz' in (lifecycle_site.content | b64decode)"
+          - lifecycle_link.stat.islnk
+          - lifecycle_link.stat.lnk_source == "/etc/nginx/sites-available/example.org"
+
+    - name: "Stop Nginx"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "stopped"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Disable Nginx before testing the started state"
+      ansible.builtin.systemd:
+        name: "nginx.service"
+        state: "stopped"
+        enabled: false
+
+    - name: "Read boot enablement before the started state"
+      ansible.builtin.command: "systemctl is-enabled nginx.service"  # noqa command-instead-of-module
+      register: lifecycle_disabled_before_started
+      changed_when: false
+      failed_when: lifecycle_disabled_before_started.rc != 1
+
+    - name: "Read the observable Nginx service state"
+      ansible.builtin.command: "systemctl is-active nginx.service"  # noqa command-instead-of-module
+      register: lifecycle_stopped_state
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert stopped state"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_stopped_state.rc != 0
+          - lifecycle_stopped_state.stdout | trim == "inactive"
+
+    - name: "Start Nginx again"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "started"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Verify Nginx is started"
+      ansible.builtin.service_facts:
+
+    - name: "Assert started state"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['nginx.service'].state == "running"
+          - lifecycle_disabled_before_started.stdout | trim == "disabled"
+
+    - name: "Read boot enablement after the started state"
+      ansible.builtin.command: "systemctl is-enabled nginx.service"  # noqa command-instead-of-module
+      register: lifecycle_disabled_after_started
+      changed_when: false
+      failed_when: lifecycle_disabled_after_started.rc != 1
+
+    - name: "Assert started state preserves boot enablement"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_disabled_before_started.rc == 1
+          - lifecycle_disabled_after_started.rc == 1
+          - lifecycle_disabled_before_started.stdout | trim == "disabled"
+          - lifecycle_disabled_after_started.stdout | trim == "disabled"
+          - not lifecycle_disabled_before_started.changed
+          - not lifecycle_disabled_after_started.changed
+
+    - name: "Uninstall the role-managed Nginx state"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "uninstall"
+        nginx_uninstall_confirm: true
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Verify uninstall removed the package and managed site"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Check the final lifecycle paths"
+      ansible.builtin.stat:
+        path: "{{ lifecycle_path }}"
+      loop:
+        - "/etc/nginx/sites-available/example.org"
+        - "/etc/nginx/sites-enabled/example.org"
+      loop_control:
+        loop_var: lifecycle_path
+      register: lifecycle_uninstall_paths
+
+    - name: "Assert uninstall observable results"
+      ansible.builtin.assert:
+        that:
+          - "'nginx' not in ansible_facts.packages"
+          - lifecycle_uninstall_paths.results | map(attribute='stat.exists') | list == [false, false]
