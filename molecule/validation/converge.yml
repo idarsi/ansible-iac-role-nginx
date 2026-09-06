@@ -24,11 +24,6 @@
       failed_when: false
       register: validation_services_before
 
-    - name: "Load role defaults for direct inventory validation tests"
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir | dirname | dirname }}/defaults/main.yml"
-
-
     - name: "Run the role in validation mode"
       ansible.builtin.include_role:
         name: "{{ playbook_dir | dirname | dirname }}"
@@ -138,12 +133,10 @@
     - name: "Reject an unsafe public directory path"
       block:
         - name: "Validate the unsafe public directory path"
-          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
           vars:
             state: "validate"
-            nginx_state: "validate"
-            nginx_blueprint_locations: []
-            nginx_blueprint_servers: []
             iac_blueprint:
               nginx:
                 directories:
@@ -162,12 +155,10 @@
     - name: "Reject an unsafe public file path"
       block:
         - name: "Validate the unsafe public file path"
-          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
           vars:
             state: "absent"
-            nginx_state: "absent"
-            nginx_blueprint_locations: []
-            nginx_blueprint_servers: []
             iac_blueprint:
               nginx:
                 files:
@@ -187,12 +178,10 @@
     - name: "Reject an unsafe public bind source path"
       block:
         - name: "Validate the unsafe public bind source path"
-          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
           vars:
             state: "validate"
-            nginx_state: "validate"
-            nginx_blueprint_locations: []
-            nginx_blueprint_servers: []
             iac_blueprint:
               nginx:
                 binds:
@@ -212,12 +201,10 @@
     - name: "Reject an unsafe public bind target path"
       block:
         - name: "Validate the unsafe public bind target path"
-          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
           vars:
             state: "absent"
-            nginx_state: "absent"
-            nginx_blueprint_locations: []
-            nginx_blueprint_servers: []
             iac_blueprint:
               nginx:
                 binds:
