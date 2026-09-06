@@ -1,0 +1,48 @@
+---
+- name: "Verify validation did not mutate role-managed state"
+  hosts: "all"
+  gather_facts: false
+  tasks:
+    - name: "Read the validation baseline"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-validation-baseline.json"
+      register: validation_baseline_file
+
+    - name: "Capture package state after validation"
+      ansible.builtin.package_facts:
+        manager: "auto"
+    - name: "Capture validation-managed paths after validation"
+      ansible.builtin.stat:
+        path: "{{ validation_path }}"
+      loop:
+        - "/etc/nginx"
+        - "/etc/yum.repos.d/nginx.repo"
+        - "/var/lib/ansible-iac-role-nginx"
+      loop_control:
+        loop_var: validation_path
+      register: validation_paths
+    - name: "Capture Nginx service state after validation"
+      ansible.builtin.service_facts:
+      failed_when: false
+      register: validation_services_after
+
+    - name: "Decode the validation baseline"
+      ansible.builtin.set_fact:
+        validation_baseline: "{{ validation_baseline_file.content | b64decode | from_json }}"
+
+    - name: "Determine whether service facts are available after validation"
+      ansible.builtin.set_fact:
+        validation_service_facts_available: >-
+          {{ not (validation_services_after.failed | default(false) | bool) and
+          'services' in (validation_services_after.ansible_facts | default({})) }}
+
+    - name: "Assert validation preserved the pre-existing managed state"
+      ansible.builtin.assert:
+        that:
+          - "('nginx' in ansible_facts.packages) == validation_baseline.nginx_installed"
+          - validation_paths.results | map(attribute='stat') | list == validation_baseline.paths
+          - validation_service_facts_available == (validation_baseline.service_facts_available | default(false))
+          - >-
+            (not (validation_baseline.service_facts_available | default(false))) or
+            ansible_facts.get('services', {}).get('nginx.service', {}) ==
+            validation_baseline.nginx_service

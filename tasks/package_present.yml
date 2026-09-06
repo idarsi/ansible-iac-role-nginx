@@ -24,9 +24,9 @@
 - name: "Ensuring packages are installed"
   ansible.builtin.dnf:
     name: "{{ iac_package }}"
-    sslverify: "{{ dnf_sslverify | default(omit) }}"
-    validate_certs: "{{ dnf_validate_certs | default(omit) }}"
-    disable_gpg_check: "{{ dnf_disable_gpg_check | default(omit) }}"
+    sslverify: "{{ iac_dnf_sslverify | default(dnf_sslverify) }}"
+    validate_certs: "{{ iac_dnf_validate_certs | default(dnf_validate_certs) }}"
+    disable_gpg_check: "{{ iac_dnf_disable_gpg_check | default(dnf_disable_gpg_check) }}"
     state: "present"
   environment:
     http_proxy: "{{ http_proxy | default(omit) }}"

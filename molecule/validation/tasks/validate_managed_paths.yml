@@ -1,0 +1,25 @@
+---
+- name: "Validate a configured managed directory path"
+  block:
+    - name: "Run managed directory validation"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        nginx_etc_directory: "{{ validation_managed_path.etc }}"
+        nginx_log_directory: "{{ validation_managed_path.log }}"
+        nginx_www_directory: "{{ validation_managed_path.www }}"
+        iac_blueprint:
+          nginx:
+            sites: []
+    - name: "Record unexpectedly accepted managed directory path"
+      ansible.builtin.set_fact:
+        managed_path_validation_results: >-
+          {{ (managed_path_validation_results | default([])) +
+             [{'failed': false, 'msg': 'Unsafe managed directory path was accepted.'}] }}
+  rescue:
+    - name: "Record expected managed directory path rejection"
+      ansible.builtin.set_fact:
+        managed_path_validation_results: >-
+          {{ (managed_path_validation_results | default([])) +
+             [{'failed': true, 'msg': ansible_failed_result.msg | default('')}] }}

@@ -1,0 +1,20 @@
+---
+- name: "Verify the Nginx cross-platform baseline"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Validate the rendered configuration"
+      ansible.builtin.command: "nginx -t"
+      changed_when: false
+    - name: "Read the platform release"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == "Rocky"
+          - ansible_facts.distribution_major_version in ["9", "10"]
+    - name: "Check the matrix site"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/matrix.example.org"
+      register: matrix_site
+    - name: "Assert the matrix site is enabled"
+      ansible.builtin.assert:
+        that: matrix_site.stat.islnk

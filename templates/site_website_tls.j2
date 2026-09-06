@@ -1,0 +1,23 @@
+server {
+  listen 80;
+  server_name {{ nginx_site.name }};
+  return 301 https://{{ nginx_site.name }}$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  server_name {{ nginx_site.name }};
+  index index.html;
+  root {{ nginx_www_directory }}/{{ nginx_site.name }}/html;
+  ssl_certificate {{ nginx_public_key_directory }}/{{ nginx_site.name }}.crt;
+  ssl_certificate_key {{ nginx_private_key_directory }}/{{ nginx_site.name }}.key;
+{% if nginx_render_locations | default(true) and nginx_site.locations is defined %}
+{% for location in nginx_site.locations %}
+  location {{ location.path }} {
+{% for directive, value in location.items() if directive not in ['path', 'autoconfigure', 'redirect_to'] and value is not none %}
+    {{ directive }} {{ value }};
+{% endfor %}
+  }
+{% endfor %}
+{% endif %}
+}

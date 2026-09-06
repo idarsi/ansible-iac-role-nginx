@@ -18,23 +18,33 @@
       - iac_dnf_skip_repo_if_package_available is defined
       - iac_dnf_repo_path is defined
       - iac_dnf_repo_name is defined
+      - iac_dnf_main_package is string
+      - iac_dnf_main_package is match('^[A-Za-z0-9][A-Za-z0-9+_.:-]*$')
+      - iac_dnf_repo_path is string
+      - iac_dnf_repo_path is match('^/etc/yum.repos.d/[A-Za-z0-9_.-]+\\.repo$')
+      - iac_dnf_repo_name is string
+      - iac_dnf_repo_name is match('^[A-Za-z0-9_.-]+$')
     fail_msg: "All tests did not pass"
 
 ###############################################################################
 # ENSURING REPOSITORY IS PRESENT
 ###############################################################################
 
+- name: "Check whether the repository file already exists"
+  ansible.builtin.stat:
+    path: "{{ iac_dnf_repo_path }}"
+  register: repo_file
+
 - name: "Setting variables"
   ansible.builtin.set_fact:
     nginx_create_repo: true
 
-- name: "Checking if server packages are available already"
-  ansible.builtin.shell: >
-    set -o pipefail &&
-    dnf list {{ iac_dnf_main_package }} |
-    grep {{ iac_dnf_main_package }} |
-    awk '{print $1}' |
-    awk '{split($0,a,"."); print a[1]}'
+- name: "Checking if the main package is already available"
+  ansible.builtin.command:
+    argv:
+      - "dnf"
+      - "list"
+      - "{{ iac_dnf_main_package }}"
   environment:
     http_proxy: "{{ http_proxy | default(omit) }}"
     https_proxy: "{{ https_proxy | default(omit) }}"
@@ -46,11 +56,9 @@
 - name: "Setting variables"
   ansible.builtin.set_fact:
     nginx_create_repo: false
-  when: "'nginx' in sw_packages.stdout_lines and iac_dnf_skip_repo_if_package_available is true"
-
-- name: "WHAAAAT"
-  ansible.builtin.debug:
-    msg: "{{ nginx_create_repo }} - {{ iac_dnf_skip_repo_if_package_available }} - {{ sw_packages }}"
+  when:
+    - iac_dnf_main_package in sw_packages.stdout
+    - iac_dnf_skip_repo_if_package_available is true
 
 - name: "Ensuring repository is in place"
   ansible.builtin.template:
@@ -59,28 +67,13 @@
     owner: root
     group: root
     mode: "0644"
-  when: nginx_create_repo
-
-###############################################################################
-# ENSURING PROXY IS CONFIGURED TO REPOSITORY IF NEEDED
-###############################################################################
-
-- name: "Checking if repository file exists"
-  ansible.builtin.stat:
-    path: "{{ iac_dnf_repo_path }}"
-  register: repo_file
-  when: nginx_create_repo
-
-- name: "Adding proxy settings to repo file if it exists and proxy settings are missing but proxy setting is defined"
-  ansible.builtin.command: >
-    sed -i '/^\[.*\]$/a proxy={{ http_proxy }}' {{ iac_dnf_repo_path }}
-  register: my_output
-  failed_when: false
-  changed_when: false
   when:
     - nginx_create_repo
-    - repo_file.stat.exists
-    - http_proxy is defined
+    - not repo_file.stat.exists
+
+- name: "Record whether this role created the repository file"
+  ansible.builtin.set_fact:
+    nginx_repo_created_by_role: "{{ nginx_create_repo | bool and not repo_file.stat.exists }}"
 
 ###############################################################################
 # ENABLING REPOSITORY
@@ -88,7 +81,11 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    iac_cli_command: "dnf config-manager --set-enabled {{ iac_dnf_repo_name }}"
+    nginx_repo_enable_argv:
+      - "dnf"
+      - "config-manager"
+      - "--set-enabled"
+      - "{{ iac_dnf_repo_name }}"
   when:
     - nginx_create_repo
     - ansible_distribution in ['RedHat', 'Rocky']
@@ -96,19 +93,73 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    iac_cli_command: "dnf config-manager setopt  {{ iac_dnf_repo_name }}.enabled=1"
+    nginx_repo_enable_argv:
+      - "dnf"
+      - "config-manager"
+      - "setopt"
+      - "{{ iac_dnf_repo_name }}.enabled=1"
   when:
     - nginx_create_repo
     - ansible_distribution == 'Fedora'
     - ansible_distribution_major_version in ['41', '42']
 
+- name: "Read the Nginx repository configuration"
+  ansible.builtin.slurp:
+    src: "{{ iac_dnf_repo_path }}"
+  register: repo_enabled_config
+  when:
+    - nginx_create_repo
+    - repo_file.stat.exists
+
+- name: "Require repository enablement when the repository file is absent"
+  ansible.builtin.set_fact:
+    nginx_repo_enable_required: true
+  when:
+    - nginx_create_repo
+    - not repo_file.stat.exists
+
+- name: "Determine whether the Nginx repository needs enabling"
+  ansible.builtin.set_fact:
+    nginx_repo_enable_required: >-
+      {{
+        (
+          (
+            '\n' ~ (repo_enabled_config.content | b64decode)
+          ).split('\n[' ~ iac_dnf_repo_name ~ ']\n', 1) | length > 1
+        )
+        and
+        (
+          (
+            (
+              '\n' ~ (repo_enabled_config.content | b64decode)
+            ).split('\n[' ~ iac_dnf_repo_name ~ ']\n', 1)[1]
+          ).split('\n[', 1)[0]
+        ) is not search(
+          '(?im)^\\s*enabled\\s*=\\s*(?:1|yes|true)\\s*(?:#.*)?$'
+        )
+      }}
+  when:
+    - nginx_create_repo
+    - repo_file.stat.exists
+
+- name: "Reset the repository enablement change marker"
+  ansible.builtin.set_fact:
+    nginx_repo_enable_changed: false
+
 - name: "Ensuring repositories are present"
-  ansible.builtin.command: >
-    {{ iac_cli_command }}
-  register: my_output
-  changed_when: my_output.rc == 0
-  failed_when: my_output.rc != 0
-  when: nginx_create_repo
+  ansible.builtin.command:
+    argv: "{{ nginx_repo_enable_argv }}"
+  register: repo_enable_output
+  changed_when: repo_enable_output.rc == 0
+  failed_when: repo_enable_output.rc != 0
+  when:
+    - nginx_create_repo
+    - nginx_repo_enable_required | bool
+    - not ansible_check_mode
+
+- name: "Record whether repository enablement changed"
+  ansible.builtin.set_fact:
+    nginx_repo_enable_changed: "{{ repo_enable_output.changed | default(false) | bool }}"
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml
@@ -122,14 +173,25 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    iac_cli_command: "dnf config-manager setopt fedora.exclude=nginx* updates.exclude=nginx*"
+    nginx_package_exclude_argv:
+      - "dnf"
+      - "config-manager"
+      - "setopt"
+      - "fedora.exclude=nginx*"
+      - "updates.exclude=nginx*"
+      - "--save"
   when:
     - nginx_create_repo
     - ansible_distribution == 'Fedora'
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    iac_cli_command: "dnf -qy module disable nginx"
+    nginx_package_exclude_argv:
+      - "dnf"
+      - "-qy"
+      - "module"
+      - "disable"
+      - "nginx"
   when:
     - nginx_create_repo
     - ansible_distribution in ['RedHat', 'Rocky']
@@ -137,19 +199,77 @@
 
 - name: "Setting variables"
   ansible.builtin.set_fact:
-    iac_cli_command: "dnf config-manager --setopt='appstream.exclude=nginx*' --save"
+    nginx_package_exclude_argv:
+      - "dnf"
+      - "config-manager"
+      - "--setopt=appstream.exclude=nginx*"
+      - "--save"
   when:
     - nginx_create_repo
     - ansible_distribution in ['RedHat', 'Rocky']
     - ansible_distribution_major_version in ['10']
 
-- name: "Ensuring other packages are excluded"
-  ansible.builtin.command: >
-    {{ iac_cli_command }}
-  register: my_output
-  changed_when: my_output.rc == 0
-  failed_when: my_output.rc != 0
+- name: "Check whether Nginx package exclusion is already configured"
+  ansible.builtin.command:
+    argv:
+      - "dnf"
+      - "config-manager"
+      - "--dump"
+  register: package_exclude_status
+  changed_when: false
+  failed_when: false
+  when:
+    - nginx_create_repo
+    - ansible_distribution == 'Fedora' or (ansible_distribution in ['RedHat', 'Rocky'] and ansible_distribution_major_version in ['10'])
+
+- name: "Check whether an Nginx module stream is enabled"
+  ansible.builtin.command:
+    argv:
+      - "dnf"
+      - "-q"
+      - "module"
+      - "list"
+      - "nginx"
+      - "--enabled"
+  register: nginx_module_enabled_status
+  changed_when: false
+  failed_when: false
+  when:
+    - nginx_create_repo
+    - ansible_distribution in ['RedHat', 'Rocky']
+    - ansible_distribution_major_version in ['8', '9']
+
+- name: "Set package exclusion requirement"
+  ansible.builtin.set_fact:
+    package_exclude_required: >-
+      {{
+        (
+          ansible_distribution in ['RedHat', 'Rocky']
+          and ansible_distribution_major_version in ['8', '9']
+          and (nginx_module_enabled_status.stdout | default('') | regex_findall('(?m)^\\s*nginx\\s+') | length) > 0
+        )
+        or (
+          ansible_distribution == 'Fedora'
+          and (package_exclude_status.stdout | default('') | regex_findall('(?m)^\\s*exclude\\s*=\\s*nginx\\*\\s*$') | length) < 2
+        )
+        or (
+          ansible_distribution in ['RedHat', 'Rocky']
+          and ansible_distribution_major_version == '10'
+          and (package_exclude_status.stdout | default('')) is not search('(?m)^\\s*exclude\\s*=\\s*nginx\\*\\s*$')
+        )
+      }}
   when: nginx_create_repo
+
+- name: "Ensuring other packages are excluded"
+  ansible.builtin.command:
+    argv: "{{ nginx_package_exclude_argv }}"
+  register: package_exclude_output
+  changed_when: package_exclude_output.rc == 0
+  failed_when: package_exclude_output.rc != 0
+  when:
+    - nginx_create_repo
+    - package_exclude_required | bool
+    - not ansible_check_mode
 
 - name: "Writing log"
   ansible.builtin.include_tasks: log_write.yml

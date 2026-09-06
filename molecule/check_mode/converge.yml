@@ -1,0 +1,16 @@
+---
+- name: "Converge a representative Nginx configuration"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Install the check-mode fixture"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "check.example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "selfsigned"

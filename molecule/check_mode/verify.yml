@@ -1,0 +1,124 @@
+---
+- name: "Verify check mode does not mutate managed state"
+  hosts: "all"
+  gather_facts: true
+  vars:
+    check_mode_blueprint:
+      nginx:
+        sites:
+          - name: "check.example.org"
+            autoconfigure: "website"
+            ssl_certificate_type: "selfsigned"
+    check_mode_paths:
+      - "/etc/nginx/nginx.conf"
+      - "/etc/nginx/sites-available/check.example.org"
+      - "/etc/nginx/sites-enabled/check.example.org"
+      - "/etc/pki/tls/private/check.example.org.key"
+      - "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+      - "/var/lib/ansible-iac-role-nginx/manifest.yml"
+  tasks:
+    - name: "Capture installed package facts before check mode"
+      ansible.builtin.package_facts:
+        manager: "auto"
+      register: check_mode_packages_before
+
+    - name: "Capture managed files before check mode"
+      ansible.builtin.stat:
+        path: "{{ check_mode_path }}"
+        checksum_algorithm: "sha256"
+      loop: "{{ check_mode_paths }}"
+      loop_control:
+        loop_var: "check_mode_path"
+      register: check_mode_before
+
+    - name: "Capture the repository path before check mode"
+      ansible.builtin.stat:
+        path: "/etc/yum.repos.d/nginx.repo"
+        checksum_algorithm: "sha256"
+      register: check_mode_repo_before
+
+    - name: "Capture repository content before check mode when present"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      when: check_mode_repo_before.stat.exists
+      register: check_mode_repo_content_before
+
+    - name: "Capture service state before check mode"
+      ansible.builtin.service_facts:
+      register: check_mode_service_before
+
+    - name: "Run the representative convergence in check and diff mode"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+        apply:
+          check_mode: true
+          diff: true
+      vars:
+        state: "install"
+        iac_blueprint: "{{ check_mode_blueprint }}"
+
+    - name: "Capture managed files after check mode"
+      ansible.builtin.stat:
+        path: "{{ check_mode_path }}"
+        checksum_algorithm: "sha256"
+      loop: "{{ check_mode_paths }}"
+      loop_control:
+        loop_var: "check_mode_path"
+      register: check_mode_after
+
+    - name: "Capture the repository path after check mode"
+      ansible.builtin.stat:
+        path: "/etc/yum.repos.d/nginx.repo"
+        checksum_algorithm: "sha256"
+      register: check_mode_repo_after
+
+    - name: "Capture repository content after check mode when present"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      when: check_mode_repo_after.stat.exists
+      register: check_mode_repo_content_after
+
+    - name: "Capture service state after check mode"
+      ansible.builtin.service_facts:
+      register: check_mode_service_after
+
+    - name: "Capture installed package facts after check mode"
+      ansible.builtin.package_facts:
+        manager: "auto"
+      register: check_mode_packages_after
+
+    - name: "Verify check mode did not change managed files or service state"
+      ansible.builtin.assert:
+        that:
+          - >-
+            check_mode_before.results | map(attribute="stat.exists", default=false) | list ==
+            check_mode_after.results | map(attribute="stat.exists", default=false) | list
+          - >-
+            check_mode_before.results | map(attribute="stat.checksum", default="") | list ==
+            check_mode_after.results | map(attribute="stat.checksum", default="") | list
+          - >-
+            check_mode_before.results | map(attribute="stat.mode", default="") | list ==
+            check_mode_after.results | map(attribute="stat.mode", default="") | list
+          - >-
+            check_mode_before.results | map(attribute="stat.pw_name", default="") | list ==
+            check_mode_after.results | map(attribute="stat.pw_name", default="") | list
+          - >-
+           check_mode_before.results | map(attribute="stat.gr_name", default="") | list ==
+            check_mode_after.results | map(attribute="stat.gr_name", default="") | list
+          - check_mode_repo_before.stat.exists == check_mode_repo_after.stat.exists
+          - not check_mode_repo_after.stat.exists
+          - >-
+            (check_mode_repo_before.stat.exists | ternary(
+              check_mode_repo_content_before.content | default(""), "")) ==
+            (check_mode_repo_after.stat.exists | ternary(
+              check_mode_repo_content_after.content | default(""), ""))
+          - ("nginx" in check_mode_packages_before.ansible_facts.packages) == ("nginx" in check_mode_packages_after.ansible_facts.packages)
+          - >-
+            ("dnf-plugins-core" in check_mode_packages_before.ansible_facts.packages) ==
+            ("dnf-plugins-core" in check_mode_packages_after.ansible_facts.packages)
+          - >-
+            check_mode_service_before.ansible_facts.services.get('nginx.service', {}).get('state', 'absent') ==
+            check_mode_service_after.ansible_facts.services.get('nginx.service', {}).get('state', 'absent')
+          - >-
+            check_mode_service_before.ansible_facts.services.get('nginx.service', {}).get('status', 'absent') ==
+            check_mode_service_after.ansible_facts.services.get('nginx.service', {}).get('status', 'absent')

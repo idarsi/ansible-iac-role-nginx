@@ -1,0 +1,124 @@
+---
+- name: "Converge the functional HTTPS fixture"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Start a test-only local HTTP backend"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        backend_pid_file="/var/tmp/nginx-functional-backend.pid"
+        backend_log="/var/tmp/nginx-functional-backend.log"
+        if test -s "$backend_pid_file" && kill -0 "$(<"$backend_pid_file")" 2>/dev/null && \
+          python3 -c 'import socket; socket.create_connection(("127.0.0.1", 8081), 1).close()'; then
+          exit 0
+        fi
+        rm -f "$backend_pid_file"
+        nohup python3 -c 'from http.server import BaseHTTPRequestHandler, HTTPServer
+        class Handler(BaseHTTPRequestHandler):
+          def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"local-nginx-backend")
+          def log_message(self, format, *args):
+            pass
+        HTTPServer(("127.0.0.1", 8081), Handler).serve_forever()' >"$backend_log" 2>&1 &
+        backend_pid=$!
+        printf '%s\n' "$backend_pid" >"$backend_pid_file"
+        for attempt in $(seq 1 20); do
+          if ! kill -0 "$backend_pid" 2>/dev/null; then
+            printf 'The local backend exited during startup:\n' >&2
+            cat "$backend_log" >&2
+            exit 1
+          fi
+          if python3 -c 'import socket; socket.create_connection(("127.0.0.1", 8081), 1).close()'; then
+            exit 0
+          fi
+          sleep 0.1
+        done
+        printf 'The local backend did not listen on 127.0.0.1:8081:\n' >&2
+        cat "$backend_log" >&2
+        exit 1
+      args:
+        executable: "/bin/bash"
+      changed_when: false
+
+    - name: "Verify the test-only backend process and port before convergence"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        test -s /var/tmp/nginx-functional-backend.pid
+        kill -0 "$(</var/tmp/nginx-functional-backend.pid)"
+        python3 -c 'import socket; socket.create_connection(("127.0.0.1", 8081), 1).close()'
+      args:
+        executable: "/bin/bash"
+      changed_when: false
+
+    - name: "Install a self-signed HTTPS website"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_dnf_skip_repo_if_package_available: false
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "functional.example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "selfsigned"
+              - name: "proxy.functional.example.org"
+                autoconfigure: "proxy"
+                ssl_certificate_type: "selfsigned"
+                proxy_pass: "http://127.0.0.1:8081"
+                locations:
+                  - path: "/backend-health"
+                    autoconfigure: "proxy"
+                    redirect_to: "http://127.0.0.1:8081/health"
+
+    - name: "Capture repository state before the targeted second convergence"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: functional_repo_before_second_run
+
+    - name: "Run the functional fixture a second time"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_dnf_skip_repo_if_package_available: false
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "functional.example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "selfsigned"
+              - name: "proxy.functional.example.org"
+                autoconfigure: "proxy"
+                ssl_certificate_type: "selfsigned"
+                proxy_pass: "http://127.0.0.1:8081"
+                locations:
+                  - path: "/backend-health"
+                    autoconfigure: "proxy"
+                    redirect_to: "http://127.0.0.1:8081/health"
+
+    - name: "Assert the repository enablement task was unchanged on the second run"
+      ansible.builtin.assert:
+        that:
+          - not (nginx_repo_enable_changed | bool)
+
+    - name: "Create test-only website content"
+      ansible.builtin.copy:
+        content: "functional-nginx-site\n"
+        dest: "/var/www/functional.example.org/html/index.html"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+
+    - name: "Capture repository state after the targeted second convergence"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      register: functional_repo_after_second_run
+
+    - name: "Assert the second convergence did not change repository state"
+      ansible.builtin.assert:
+        that:
+          - functional_repo_before_second_run.content == functional_repo_after_second_run.content

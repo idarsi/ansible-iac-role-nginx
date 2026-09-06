@@ -1,0 +1,14 @@
+---
+driver:
+  name: "podman"
+platforms:
+  - name: "rocky9"
+    image: "quay.io/rockylinux/rockylinux:9"
+    pre_build_image: true
+provisioner:
+  name: "ansible"
+  config_options:
+    defaults:
+      interpreter_python: "auto_silent"
+verifier:
+  name: "ansible"

@@ -11,17 +11,12 @@
 # SETTING VARIABLES
 ###############################################################################
 
-- name: "Setting variables"
-  ansible.builtin.set_fact:
-    nginx_server_port: "{{ nginx_server.listen | regex_search('([0-9]{2,5})(?!\\.)\\b') }}"
-
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
       - nginx_etc_directory is defined
-      - nginx_server is defined
-      - nginx_server_port is defined
-      - nginx_site.name is defined
+      - nginx_server is mapping
+      - nginx_site.name is string
     fail_msg: "All tests did not pass"
 
 ###############################################################################

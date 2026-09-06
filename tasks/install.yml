@@ -13,12 +13,12 @@
 - name: "STATE: Ensure Nginx sites are present"
   ansible.builtin.include_tasks: loop_sites.yml
   vars:
-    nginx_state: "site_present"
+    nginx_loop_state: "site_present"
 
 - name: "STATE: Ensure Nginx site is enabled"
   ansible.builtin.include_tasks: loop_sites.yml
   vars:
-    nginx_state: "site_enabled"
+    nginx_loop_state: "site_enabled"
 
 - name: "STATE: Ensure Nginx is started"
   ansible.builtin.include_tasks: started.yml

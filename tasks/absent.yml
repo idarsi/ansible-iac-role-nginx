@@ -10,8 +10,61 @@
 ###############################################################################
 # SETTING VARIABLES
 ###############################################################################
+###############################################################################
+# VALIDATING OWNERSHIP BEFORE ANY MUTATION
+###############################################################################
 
+- name: "Check the ownership marker before absent mutations"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_marker }}"
+  register: nginx_absent_preflight_marker_stat
 
+- name: "Check the ownership manifest before absent mutations"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_manifest }}"
+  register: nginx_absent_preflight_manifest_stat
+
+- name: "Require a complete ownership pair when absent sees managed state"
+  ansible.builtin.assert:
+    that:
+      - nginx_absent_preflight_marker_stat.stat.exists == nginx_absent_preflight_manifest_stat.stat.exists
+    fail_msg: "Refusing absent state: the Nginx ownership marker or manifest is missing."
+
+- name: "Read the ownership marker before absent mutations"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_marker }}"
+  register: nginx_absent_preflight_marker_raw
+  when: nginx_absent_preflight_marker_stat.stat.exists and nginx_absent_preflight_manifest_stat.stat.exists
+
+- name: "Read the ownership manifest before absent mutations"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_manifest }}"
+  register: nginx_absent_preflight_manifest_raw
+  when: nginx_absent_preflight_marker_stat.stat.exists and nginx_absent_preflight_manifest_stat.stat.exists
+
+- name: "Validate ownership before absent mutations"
+  ansible.builtin.assert:
+    that:
+      - nginx_absent_preflight_data.owner == 'ansible-iac-role-nginx'
+      - nginx_absent_preflight_data.paths is sequence
+      - nginx_absent_preflight_data.paths | length > 0
+      - nginx_absent_preflight_data.paths | select('match', '^/[^/].*') | list | length == nginx_absent_preflight_data.paths | length
+      - nginx_absent_preflight_data.managed_sites is sequence
+      - nginx_absent_preflight_data.managed_sites | select('match', '^[A-Za-z0-9.-]+$') | list | length == nginx_absent_preflight_data.managed_sites | length
+      - "'/' not in nginx_absent_preflight_data.paths"
+      - "nginx_absent_preflight_marker_raw.content | b64decode | trim == 'ansible-iac-role-nginx'"
+      - >-
+        nginx_absent_preflight_data.paths | sort == [nginx_etc_directory] | sort or
+        nginx_absent_preflight_data.paths | sort == [nginx_etc_directory, iac_dnf_repo_path] | sort
+    fail_msg: "Refusing absent state: the ownership marker or manifest is invalid or unsafe."
+  vars:
+    nginx_absent_preflight_data: "{{ nginx_absent_preflight_manifest_raw.content | b64decode | from_yaml }}"
+  when: nginx_absent_preflight_marker_stat.stat.exists and nginx_absent_preflight_manifest_stat.stat.exists
+
+- name: "Normalize the validated absent ownership manifest"
+  ansible.builtin.set_fact:
+    nginx_absent_manifest_paths: "{{ (nginx_absent_preflight_manifest_raw.content | b64decode | from_yaml).paths }}"
+  when: nginx_absent_preflight_marker_stat.stat.exists and nginx_absent_preflight_manifest_stat.stat.exists
 
 ###############################################################################
 # ENSURING SERVICE IS STOPPED
@@ -48,17 +101,64 @@
     iac_fs_files: "{{ iac_blueprint.nginx.files | default([]) }}"
 
 ###############################################################################
+# VALIDATING REPOSITORY REMOVAL
+###############################################################################
+
+- name: "Check the ownership manifest before package removal"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_manifest }}"
+  register: nginx_absent_manifest_stat
+
+- name: "Check the ownership marker before package removal"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_marker }}"
+  register: nginx_absent_marker_stat
+
+- name: "Read the ownership manifest before package removal"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_manifest }}"
+  register: nginx_absent_manifest_raw
+  when:
+    - nginx_absent_manifest_stat.stat.exists
+    - nginx_absent_marker_stat.stat.exists
+
+- name: "Validate the optional ownership manifest"
+  ansible.builtin.assert:
+    that:
+      - nginx_absent_manifest_data.owner == 'ansible-iac-role-nginx'
+      - nginx_absent_manifest_data.paths is sequence
+      - nginx_absent_manifest_data.paths | select('match', '^/[^/].*') | list | length == nginx_absent_manifest_data.paths | length
+      - >-
+        nginx_absent_manifest_data.paths | sort == [nginx_etc_directory] | sort or
+        nginx_absent_manifest_data.paths | sort == [nginx_etc_directory, iac_dnf_repo_path] | sort
+    fail_msg: "Refusing absent state: the ownership manifest is invalid or unsafe."
+  vars:
+    nginx_absent_manifest_data: "{{ nginx_absent_manifest_raw.content | b64decode | from_yaml }}"
+  when:
+    - nginx_absent_manifest_stat.stat.exists
+    - nginx_absent_marker_stat.stat.exists
+
+- name: "Validate the repository path before any removal"
+  ansible.builtin.assert:
+    that:
+      - iac_dnf_repo_path is string
+      - iac_dnf_repo_path is match('^/etc/yum.repos.d/[A-Za-z0-9_.-]+\\.repo$')
+    fail_msg: "Refusing repository removal outside /etc/yum.repos.d/*.repo."
+
+###############################################################################
 # ENSURING NGINX PACKAGE IS ABSENT
 ###############################################################################
 
-- name: "Ensuring nginx is installed"
+- name: "Ensuring nginx is absent"
   ansible.builtin.include_tasks: package_absent.yml
   vars:
     iac_package: "nginx"
 
-###############################################################################
-# ENSURING REPOSITORIES ARE PRESENT
-###############################################################################
-
-- name: "Ensuring Nginx repositories are present"
-  ansible.builtin.include_tasks: repo_present.yml
+- name: "Remove the role-managed Nginx repository"
+  ansible.builtin.file:
+    path: "{{ iac_dnf_repo_path }}"
+    state: "absent"
+  when:
+    - nginx_absent_preflight_marker_stat.stat.exists
+    - nginx_absent_preflight_manifest_stat.stat.exists
+    - iac_dnf_repo_path in nginx_absent_manifest_paths

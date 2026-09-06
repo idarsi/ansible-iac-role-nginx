@@ -1,37 +1,9 @@
 ---
-###############################################################################
-#
-# server_enabled.yml
-#
-# @author Arsi Atomi
-#
-###############################################################################
-
-###############################################################################
-# SETTING VARIABLES
-###############################################################################
-
-- name: "Checking if required variables are defined"
-  ansible.builtin.assert:
-    that:
-      - nginx_autoconfigure is defined
-      - nginx_etc_directory is defined
-      - nginx_site.name is defined
-    fail_msg: "All tests did not pass"
-
-###############################################################################
-# ENSURING SERVER IS ENABLED
-###############################################################################
-
-- name: "Create a symbolic link for server"
+- name: "Enable the autoconfigured site through the unified path"
   ansible.builtin.file:
     src: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
     dest: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     owner: root
     group: root
-    state: link
-
-- name: "Writing log"
-  ansible.builtin.include_tasks: log_write.yml
-  vars:
-    iac_log_write: "Ensured {{ nginx_site.name }} was enabled"
+    state: "link"
+  notify: "Validate Nginx configuration"

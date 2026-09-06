@@ -1,0 +1,16 @@
+---
+- name: "Converge the cross-platform Nginx baseline"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Install Nginx with a plain HTTP site"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "matrix.example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "none"

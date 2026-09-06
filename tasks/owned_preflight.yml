@@ -1,0 +1,50 @@
+---
+- name: "Check the role ownership marker"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_marker }}"
+  register: nginx_marker_stat
+
+- name: "Check the role ownership manifest"
+  ansible.builtin.stat:
+    path: "{{ nginx_management_manifest }}"
+  register: nginx_manifest_stat
+
+- name: "Require role ownership before uninstall"
+  ansible.builtin.assert:
+    that:
+      - nginx_marker_stat.stat.exists
+      - nginx_manifest_stat.stat.exists
+    fail_msg: "Refusing uninstall: the Nginx ownership marker or manifest is missing."
+
+- name: "Read the role ownership manifest"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_manifest }}"
+  register: nginx_manifest_raw
+
+- name: "Read the role ownership marker"
+  ansible.builtin.slurp:
+    src: "{{ nginx_management_marker }}"
+  register: nginx_marker_raw
+
+- name: "Validate the ownership manifest before mutation"
+  ansible.builtin.assert:
+    that:
+      - nginx_manifest_data.owner == 'ansible-iac-role-nginx'
+      - nginx_manifest_data.paths is sequence
+      - nginx_manifest_data.paths | length > 0
+      - nginx_manifest_data.paths | select('match', '^/[^/].*') | list | length == nginx_manifest_data.paths | length
+      - nginx_manifest_data.managed_sites is sequence
+      - nginx_manifest_data.managed_sites | select('match', '^[A-Za-z0-9.-]+$') | list | length == nginx_manifest_data.managed_sites | length
+      - "'/' not in nginx_manifest_data.paths"
+      - "nginx_marker_raw.content | b64decode | trim == 'ansible-iac-role-nginx'"
+      - >-
+        nginx_manifest_data.paths | sort == [nginx_etc_directory] | sort or
+        nginx_manifest_data.paths | sort == [nginx_etc_directory, iac_dnf_repo_path] | sort
+    fail_msg: "Refusing uninstall: the ownership marker or manifest is invalid or unsafe."
+  vars:
+    nginx_manifest_data: "{{ nginx_manifest_raw.content | b64decode | from_yaml }}"
+
+- name: "Normalize verified ownership paths"
+  ansible.builtin.set_fact:
+    nginx_owned_paths: "{{ (nginx_manifest_raw.content | b64decode | from_yaml).paths }}"
+    nginx_owned_managed_sites: "{{ (nginx_manifest_raw.content | b64decode | from_yaml).managed_sites | default([]) }}"

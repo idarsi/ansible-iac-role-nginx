@@ -1,0 +1,24 @@
+---
+- name: "Converge the stable Nginx lifecycle baseline"
+  hosts: "all"
+  gather_facts: true
+  vars:
+    lifecycle_blueprint:
+      nginx:
+        sites:
+          - name: "example.org"
+            autoconfigure: "none"
+            ssl_certificate_type: "none"
+            servers:
+              - listen: "8080"
+                server_name: "example.org"
+                locations:
+                  - path: "/healthz"
+                    return: "200 ok"
+  tasks:
+    - name: "Install and configure the stable lifecycle baseline"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint: "{{ lifecycle_blueprint }}"

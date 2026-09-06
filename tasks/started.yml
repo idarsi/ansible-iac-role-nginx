@@ -11,10 +11,14 @@
 # ENSURING SYSTEMD SERVICE IS STARTED
 ###############################################################################
 
-- name: "Executing systemd daemon-reload"
+- name: "Test Nginx configuration before service start"
+  ansible.builtin.command: "nginx -t"
+  changed_when: false
+
+- name: "Ensure Nginx is started without changing boot enablement"
   ansible.builtin.systemd:
-    name: nginx
-    state: restarted
+    name: "{{ iac_service_name }}"
+    state: "started"
     daemon_reload: true
 
 - name: "Writing log"

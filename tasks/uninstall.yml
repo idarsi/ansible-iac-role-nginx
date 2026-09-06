@@ -7,18 +7,29 @@
 #
 ###############################################################################
 
+- name: "Validate ownership before any uninstall mutation"
+  ansible.builtin.include_tasks: owned_preflight.yml
+
+- name: "Restrict uninstall site operations to manifest-owned sites"
+  ansible.builtin.set_fact:
+    nginx_sites: "{{ nginx_sites | selectattr('name', 'in', nginx_owned_managed_sites) | list }}"
+
 - name: "STATE: Ensure Nginx is stopped"
   ansible.builtin.include_tasks: stopped.yml
 
 - name: "STATE: Ensure Nginx site is disabled"
   ansible.builtin.include_tasks: loop_sites.yml
   vars:
-    nginx_state: "site_disabled"
+    nginx_loop_state: "site_disabled"
 
-#- name: "STATE: Ensure Nginx sites are absent"
-#  ansible.builtin.include_tasks: loop_sites.yml
-#  vars:
-#    nginx_state: "site_absent"
+- name: "STATE: Ensure Nginx sites are absent"
+  ansible.builtin.include_tasks: loop_sites.yml
+  vars:
+    nginx_loop_state: "site_absent"
 
 - name: "STATE: Ensure Nginx installation is absent"
   ansible.builtin.include_tasks: absent.yml
+
+- name: "Remove only manifest-owned Nginx configuration"
+  ansible.builtin.include_tasks: owned_cleanup.yml
+  when: nginx_uninstall_remove_config | bool

@@ -7,7 +7,7 @@
 {%- endmacro %}
 
 {% macro render_directives(d) -%}
-{# d = dict direktiiveistä, vain "locations" ohitetaan #}
+{# d = a directive mapping; only "locations" is skipped #}
 {% for k, v in d.items() if k != 'locations' and v is not none %}
 {{ k }} {{ render_value(v) }};
 {% endfor %}
@@ -35,10 +35,10 @@ location {{ loc.path | default('/') }} {
 {% endif %}
 {% endmacro %}
 
-{% macro render_server(srv) %}
+{% macro render_server(srv, render_locations=true) %}
 server {
 {{ render_directives(srv) | indent(2, True) }}
-{% if srv.locations is defined and srv.locations %}
+{% if render_locations and srv.locations is defined and srv.locations %}
 {% for loc in srv.locations %}
 {{ render_location(loc) | indent(2, True) }}
 {% endfor %}

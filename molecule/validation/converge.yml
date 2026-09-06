@@ -1,0 +1,440 @@
+---
+- name: "Validate a minimal Nginx blueprint"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Capture the validation fixture baseline"
+      ansible.builtin.stat:
+        path: "{{ validation_path }}"
+      loop:
+        - "/etc/nginx"
+        - "/etc/yum.repos.d/nginx.repo"
+        - "/var/lib/ansible-iac-role-nginx"
+      loop_control:
+        loop_var: validation_path
+      register: validation_paths_before
+
+    - name: "Capture package and service baseline"
+      ansible.builtin.package_facts:
+        manager: "auto"
+      register: validation_packages_before
+
+    - name: "Capture Nginx service baseline"
+      ansible.builtin.service_facts:
+      failed_when: false
+      register: validation_services_before
+
+    - name: "Load role defaults for direct inventory validation tests"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir | dirname | dirname }}/defaults/main.yml"
+
+
+    - name: "Run the role in validation mode"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            binds: []
+            sites:
+              - name: "example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "selfsigned"
+                servers: []
+              - name: "proxy.example.org"
+                autoconfigure: "proxy"
+                ssl_certificate_type: "selfsigned"
+                proxy_pass: "http://127.0.0.1:3000"
+                locations:
+                  - path: "/backend-health"
+                    autoconfigure: "proxy"
+                    redirect_to: "http://127.0.0.1:3000/health"
+                servers: []
+
+    - name: "Render a custom repository name without contacting an external repository"
+      ansible.builtin.template:
+        src: "{{ playbook_dir | dirname | dirname }}/templates/nginx.repo.j2"
+        dest: "/var/tmp/nginx-custom-repository.repo"
+        mode: "0644"
+      vars:
+        iac_dnf_repo_name: "internal-nginx"
+
+    - name: "Read the custom repository rendering"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-custom-repository.repo"
+      register: custom_repository_rendering
+
+    - name: "Verify the custom repository name is used as the section"
+      ansible.builtin.assert:
+        that:
+          - "'[internal-nginx]' in (custom_repository_rendering.content | b64decode)"
+          - "'[nginx-stable]' not in (custom_repository_rendering.content | b64decode)"
+
+    - name: "Reject a reserved server-level proxy root location"
+      block:
+        - name: "Validate the unsafe proxy blueprint"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                sites:
+                  - name: "proxy.example.org"
+                    autoconfigure: "proxy"
+                    ssl_certificate_type: "none"
+                    proxy_pass: "http://127.0.0.1:3000"
+                    servers:
+                      - listen: "8080"
+                        server_name: "proxy.example.org"
+                        locations:
+                          - path: "/"
+                            autoconfigure: "proxy"
+                            redirect_to: "http://127.0.0.1:3001"
+      rescue:
+        - name: "Record reserved server-level location rejection"
+          ansible.builtin.set_fact:
+            duplicate_proxy_rejected: true
+            duplicate_proxy_message: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify reserved server-level location rejection"
+      ansible.builtin.assert:
+        that:
+          - duplicate_proxy_rejected | default(false)
+          - >-
+            (duplicate_proxy_message | regex_search("Proxy sites must not define the reserved root location '/'.") | default('', true) | length) > 0
+
+    - name: "Reject duplicate server-level locations"
+      block:
+        - name: "Validate duplicate server-level locations"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                sites:
+                  - name: "duplicate.example.org"
+                    autoconfigure: "none"
+                    ssl_certificate_type: "none"
+                    servers:
+                      - listen: "8080"
+                        locations:
+                          - path: "/health"
+                          - path: "/health"
+      rescue:
+        - name: "Record duplicate server-level location rejection"
+          ansible.builtin.set_fact:
+            duplicate_server_location_rejected: true
+            duplicate_server_location_message: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify duplicate server-level location rejection"
+      ansible.builtin.assert:
+        that:
+          - duplicate_server_location_rejected | default(false)
+          - "'Server-level location paths must be unique.' in duplicate_server_location_message"
+
+    - name: "Reject an unsafe public directory path"
+      block:
+        - name: "Validate the unsafe public directory path"
+          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          vars:
+            state: "validate"
+            nginx_state: "validate"
+            nginx_blueprint_locations: []
+            nginx_blueprint_servers: []
+            iac_blueprint:
+              nginx:
+                directories:
+                  - path: "/etc"
+                sites: []
+        - name: "Record an unexpectedly accepted public directory path"
+          ansible.builtin.set_fact:
+            public_path_directory_rejected: false
+            public_path_directory_message: "Unsafe public directory path was accepted."
+      rescue:
+        - name: "Record the public directory path rejection"
+          ansible.builtin.set_fact:
+            public_path_directory_rejected: true
+            public_path_directory_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
+    - name: "Reject an unsafe public file path"
+      block:
+        - name: "Validate the unsafe public file path"
+          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          vars:
+            state: "absent"
+            nginx_state: "absent"
+            nginx_blueprint_locations: []
+            nginx_blueprint_servers: []
+            iac_blueprint:
+              nginx:
+                files:
+                  - path: "/etc/passwd"
+                    content: "not written"
+                sites: []
+        - name: "Record an unexpectedly accepted public file path"
+          ansible.builtin.set_fact:
+            public_path_file_rejected: false
+            public_path_file_message: "Unsafe public file path was accepted."
+      rescue:
+        - name: "Record the public file path rejection"
+          ansible.builtin.set_fact:
+            public_path_file_rejected: true
+            public_path_file_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
+    - name: "Reject an unsafe public bind source path"
+      block:
+        - name: "Validate the unsafe public bind source path"
+          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          vars:
+            state: "validate"
+            nginx_state: "validate"
+            nginx_blueprint_locations: []
+            nginx_blueprint_servers: []
+            iac_blueprint:
+              nginx:
+                binds:
+                  - source: "/srv/data/../etc"
+                    target: "/var/www"
+                sites: []
+        - name: "Record an unexpectedly accepted public bind source path"
+          ansible.builtin.set_fact:
+            public_path_bind_source_rejected: false
+            public_path_bind_source_message: "Unsafe public bind source path was accepted."
+      rescue:
+        - name: "Record the public bind source path rejection"
+          ansible.builtin.set_fact:
+            public_path_bind_source_rejected: true
+            public_path_bind_source_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
+    - name: "Reject an unsafe public bind target path"
+      block:
+        - name: "Validate the unsafe public bind target path"
+          ansible.builtin.include_tasks: "{{ playbook_dir | dirname | dirname }}/tasks/validate_inventory.yml"
+          vars:
+            state: "absent"
+            nginx_state: "absent"
+            nginx_blueprint_locations: []
+            nginx_blueprint_servers: []
+            iac_blueprint:
+              nginx:
+                binds:
+                  - source: "/srv/data"
+                    target: "/etc/passwd"
+                sites: []
+        - name: "Record an unexpectedly accepted public bind target path"
+          ansible.builtin.set_fact:
+            public_path_bind_target_rejected: false
+            public_path_bind_target_message: "Unsafe public bind target path was accepted."
+      rescue:
+        - name: "Record the public bind target path rejection"
+          ansible.builtin.set_fact:
+            public_path_bind_target_rejected: true
+            public_path_bind_target_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
+    - name: "Verify unsafe public directory path was rescued"
+      ansible.builtin.assert:
+        that:
+          - public_path_directory_rejected
+          - >-
+            (((public_path_directory_message)
+            | regex_search("Directory records need a safe absolute non-root path without traversal or unsafe parent scope, and an octal mode."))
+            | default("", true) | length) > 0
+
+    - name: "Verify unsafe public file path was rescued"
+      ansible.builtin.assert:
+        that:
+          - public_path_file_rejected
+          - >-
+            (((public_path_file_message)
+            | regex_search("File records need a safe absolute non-root path without traversal or unsafe parent scope, string content, and an octal mode."))
+            | default("", true) | length) > 0
+
+    - name: "Verify unsafe public bind source path was rescued"
+      ansible.builtin.assert:
+        that:
+          - public_path_bind_source_rejected
+          - >-
+            (((public_path_bind_source_message)
+            | regex_search("Bind records need safe absolute non-root source and target paths without traversal or unsafe parent scope."))
+            | default("", true) | length) > 0
+
+    - name: "Verify unsafe public bind target path was rescued"
+      ansible.builtin.assert:
+        that:
+          - public_path_bind_target_rejected
+          - >-
+            (((public_path_bind_target_message)
+            | regex_search("Bind records need safe absolute non-root source and target paths without traversal or unsafe parent scope."))
+            | default("", true) | length) > 0
+
+    - name: "Reject unsafe Nginx managed directory paths"
+      ansible.builtin.include_tasks: "tasks/validate_managed_paths.yml"
+      loop:
+        - { etc: "/etc/nginx;return 200", log: "/var/log/nginx", www: "/var/www" }
+        - { etc: "/etc/nginx", log: "relative/log", www: "/var/www" }
+        - { etc: "/etc/nginx", log: "/var/log/nginx", www: "/var/www/../srv" }
+      loop_control:
+        loop_var: validation_managed_path
+
+    - name: "Verify managed directory path guardrails"
+      ansible.builtin.assert:
+        that:
+          - managed_path_validation_results | length == 3
+          - managed_path_validation_results | map(attribute='failed') | select('equalto', true) | list | length == 3
+          - managed_path_validation_results | map(attribute='msg') | select('search', 'invalid path') | list | length == 3
+
+    - name: "Reject traversal-like site names before mutation"
+      block:
+        - name: "Validate the unsafe site name"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "site_absent"
+            iac_blueprint:
+              nginx:
+                sites:
+                  - name: ".."
+                    autoconfigure: "none"
+                    ssl_certificate_type: "none"
+                    servers: []
+      rescue:
+        - name: "Record traversal-like site rejection"
+          ansible.builtin.set_fact:
+            unsafe_site_rejected: true
+            unsafe_site_failure: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify traversal-like site rejection"
+      ansible.builtin.assert:
+        that:
+          - unsafe_site_rejected | default(false)
+          - "'Site names must be non-empty safe names' in unsafe_site_failure"
+
+    - name: "Reject an injected location path before mutation"
+      block:
+        - name: "Validate the injected location path"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                sites:
+                  - name: "injection.example.org"
+                    autoconfigure: "none"
+                    ssl_certificate_type: "none"
+                    servers:
+                      - listen: "8080"
+                        server_name: "injection.example.org"
+                        locations:
+                          - path: "/safe;return 200"
+                            return: "200 ok"
+      rescue:
+        - name: "Record injected location path rejection"
+          ansible.builtin.set_fact:
+            injected_location_rejected: true
+            injected_location_failure: "{{ ansible_failed_result }}"
+        - name: "Persist the complete injected-location failure result"
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result | to_nice_json }}"
+            dest: "/var/tmp/nginx-injected-location-failure.json"
+            mode: "0600"
+
+    - name: "Read the persisted injected-location failure result"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-injected-location-failure.json"
+      register: injected_location_failure_file
+
+    - name: "Verify the exact injected location path rejection"
+      ansible.builtin.assert:
+        that:
+          - injected_location_rejected | default(false)
+          - injected_location_failure.results | length == 1
+          - >-
+            (injected_location_failure_file.content | b64decode) is search(
+            '"path": "/safe;return 200"')
+          - >-
+            (injected_location_failure_file.content | b64decode) is search(
+            '"msg": "Locations need a safe path; proxy locations need redirect_to. The proxy preset reserves location /\\."')
+          - >-
+            (injected_location_failure_file.content | b64decode) is search(
+            'Locations need a safe path; proxy locations need redirect_to. The proxy preset reserves location /\\.')
+
+    - name: "Reject an SSL listener without a certificate pair"
+      block:
+        - name: "Validate the incomplete TLS blueprint"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                sites:
+                  - name: "incomplete-tls.example.org"
+                    autoconfigure: "none"
+                    ssl_certificate_type: "selfsigned"
+                    servers:
+                      - listen: "443 ssl"
+                        server_name: "incomplete-tls.example.org"
+                        locations: []
+      rescue:
+        - name: "Record incomplete TLS rejection"
+          ansible.builtin.set_fact:
+            incomplete_tls_rejected: true
+        - name: "Persist the complete incomplete-TLS failure result"
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result | to_nice_json }}"
+            dest: "/var/tmp/nginx-incomplete-tls-failure.json"
+            mode: "0600"
+
+    - name: "Read the persisted incomplete-TLS failure result"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-incomplete-tls-failure.json"
+      register: incomplete_tls_failure_file
+
+    - name: "Verify the incomplete TLS rejection message"
+      ansible.builtin.assert:
+        that:
+          - incomplete_tls_rejected | default(false)
+          - >-
+            (incomplete_tls_failure_file.content | b64decode) is search(
+            '"(?:fail_msg|msg)"\\s*:\\s*"SSL listeners require ssl_certificate and ssl_certificate_key under the allowed certificate directories\\."'
+            )
+
+    - name: "Reject an unsafe repository path before mutation"
+      block:
+        - name: "Validate the unsafe repository path"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "present"
+            iac_dnf_repo_path: "/tmp/nginx.repo"
+            iac_blueprint:
+              nginx:
+                sites: []
+      rescue:
+        - name: "Record repository path rejection"
+          ansible.builtin.set_fact:
+            unsafe_repo_path_rejected: true
+            unsafe_repo_path_message: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: "Verify repository path guardrail"
+      ansible.builtin.assert:
+        that:
+          - unsafe_repo_path_rejected | default(false)
+          - "'Nginx role defaults contain an invalid path, option, or safety setting.' in unsafe_repo_path_message"
+
+    - name: "Persist the validation baseline for the verifier"
+      ansible.builtin.copy:
+        content: >-
+          {{ {
+            'paths': validation_paths_before.results | map(attribute='stat') | list,
+            'nginx_installed': 'nginx' in (validation_packages_before.packages | default({})),
+            'service_facts_available': not (validation_services_before.failed | default(false) | bool) and
+              'services' in (validation_services_before.ansible_facts | default({})),
+            'nginx_service': ((validation_services_before.ansible_facts | default({})).get('services', {})).get('nginx.service', {})
+          } | to_nice_json }}
+        dest: "/var/tmp/nginx-validation-baseline.json"
+        mode: "0600"
