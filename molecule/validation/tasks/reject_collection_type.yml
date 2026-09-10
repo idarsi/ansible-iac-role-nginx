@@ -1,0 +1,25 @@
+---
+- name: "Reject a mapping used as a Nginx collection"
+  block:
+    - name: "Validate a blueprint with a mapping collection"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint: >-
+          {{ {'nginx': {nginx_invalid_collection_name: {}}} }}
+    - name: "Record mapping collection validation result"
+      ansible.builtin.set_fact:
+        mapping_collection_results: >-
+          {{ (mapping_collection_results | default([])) +
+          [{'name': nginx_invalid_collection_name,
+          'failed': false,
+          'message': 'Mapping collection was accepted.'}] }}
+  rescue:
+    - name: "Record mapping collection validation failure"
+      ansible.builtin.set_fact:
+        mapping_collection_results: >-
+          {{ (mapping_collection_results | default([])) +
+          [{'name': nginx_invalid_collection_name,
+          'failed': true,
+          'message': ansible_failed_result | to_nice_json}] }}

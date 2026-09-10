@@ -1,4 +1,7 @@
 ---
+- name: "Validate record and collection types before normalization"
+  ansible.builtin.include_tasks: validate_types.yml
+
 - name: "Build normalized Nginx location list"
   ansible.builtin.set_fact:
     nginx_blueprint_locations: >-

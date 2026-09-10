@@ -4,9 +4,9 @@
 
 | Platform/image | Ansible or application versions | Molecule scenarios | Main coverage |
 |---|---|---|---|
-| Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | Ansible from the shared environment; nginx stable | `validation` | Validation and no-mutation contract |
-| Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | Ansible from the shared environment; nginx stable | `guardrails`, `lifecycle`, `check_mode`, `functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
-| Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | Ansible from the shared environment; nginx stable | `platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
+| Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | ansible-core 2.21.3; nginx stable | `validation` | Validation and no-mutation contract |
+| Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | ansible-core 2.21.3; nginx stable | `guardrails`, `lifecycle`, `check_mode`, `functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
+| Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | ansible-core 2.21.3; nginx stable | `platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
 
 Rocky Linux 9 and 10 are automatically tested by the scheduled
 `platform-matrix` scenario. RHEL 9/10 are supported by the role but are not
@@ -17,13 +17,22 @@ automatically covered here.
 * `validation` checks valid input, invalid site/TLS/repository paths, duplicate
   and reserved server-level locations, supported states, and validation-only preservation of the
   pre-existing package, service, and role-managed path state. It also rejects
-  relative, parent-traversal, and Nginx-injection values for all three managed
+  a string value for the `sites` collection and mapping values for all five
+  public collections with actionable type errors. It also rejects relative,
+  parent-traversal, and Nginx-injection values for all three managed
   directory variables before host mutation. It also rejects directory, file,
-  and bind source/target traversal and unsafe paths in both validation and
-  absent states, with exact failure messages and preservation of pre-existing
-  state. It also renders a custom DNF repository section without contacting an
-  external repository. The baseline
+   and bind source/target traversal and unsafe paths in both validation and
+   absent states, with exact failure messages and preservation of pre-existing
+   state. It also renders a custom DNF repository section without contacting an
+  external repository. Check-mode fixtures execute the production present and
+  absent package dispatch paths using the hardcoded test-only `nginx-core`
+  override. Both package operations run in check mode without installing or
+  removing a package. The baseline
   fixture file written by the test harness is intentionally excluded.
+  The scenario intentionally omits Molecule's idempotence phase: the
+  check-mode package-present fixture correctly predicts a change on every run
+  because `nginx-core` is never installed. Production idempotence is covered
+  by the lifecycle and functional scenarios.
 * `guardrails` verifies uninstall confirmation, external repository/site and
   unrelated-file preservation, manifest ownership filtering, preservation of an
   unmanaged nested file below a manifest-owned directory after opt-in owned
@@ -52,12 +61,18 @@ automatically covered here.
 * `platform-matrix` repeats the baseline on Rocky Linux 9 and 10. Privileged
   systemd and the cgroup mount are test-only Podman settings.
 
+The validation and functional scenarios do not execute `restorecon` in their
+non-SELinux/container environments. Production `restorecon` errors fail the
+convergence, but the SELinux-enabled failure path is not covered by automated
+tests. The test suite does not infer restorecon coverage from
+`virtualization_type` facts.
+
 ## Commands
 
 Use the shared environment, without installing dependencies:
 
 ```bash
-export PATH="/home/arsi/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
+export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
 ansible-playbook --syntax-check -i localhost, -c local molecule/validation/converge.yml
 ansible-lint --profile production
 molecule test -s validation

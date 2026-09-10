@@ -1,0 +1,25 @@
+---
+- name: "Check package override fixture variables"
+  ansible.builtin.assert:
+    that:
+      - "validation_package_state in ['present', 'absent']"
+      - "iac_dnf_main_package is defined"
+      - "validation_package_fixture_name is defined"
+    fail_msg: "The package override fixture is missing safe test values."
+
+- name: "Run the production package dispatch path without host mutation"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+    tasks_from: "package_dispatch"
+    apply:
+      check_mode: true
+  vars:
+    # Use the same production dispatch used by present.yml and absent.yml.
+    # The caller keeps the fixture name independent from the production package
+    # variable; the observable result below is therefore not a name echo.
+    iac_package_state: "{{ validation_package_state }}"
+    nginx_etc_preexisting: true
+    iac_dnf_skip_repo_if_package_available: true
+    iac_blueprint:
+      nginx:
+        sites: []

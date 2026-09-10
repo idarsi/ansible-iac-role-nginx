@@ -10,5 +10,16 @@ provisioner:
   config_options:
     defaults:
       interpreter_python: "auto_silent"
+      # The validation image has a writable /tmp; do not rely on the remote
+      # user's home directory for Ansible's temporary files.
+      remote_tmp: "/tmp/.ansible/tmp"
 verifier:
   name: "ansible"
+scenario:
+  name: "validation"
+  test_sequence:
+    - "syntax"
+    - "create"
+    - "converge"
+    - "verify"
+    - "destroy"

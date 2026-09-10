@@ -3,8 +3,6 @@
 #
 # present.yml
 #
-# @author Arsi Atomi
-#
 ###############################################################################
 
 ###############################################################################
@@ -81,9 +79,9 @@
 ###############################################################################
 
 - name: "Ensuring nginx is installed"
-  ansible.builtin.include_tasks: package_present.yml
+  ansible.builtin.include_tasks: package_dispatch.yml
   vars:
-    iac_package: "nginx"
+    iac_package_state: "present"
 
 ###############################################################################
 # ENSURING CONFIGURATION DIRECTORIES EXIST
@@ -125,9 +123,12 @@
 - name: "Ensuring correct SELinux context"
   ansible.builtin.command:
     cmd: "restorecon -Rv {{ nginx_www_directory }}"
+  register: nginx_restorecon
   changed_when: false
-  failed_when: false
-  when: ansible_facts["virtualization_type"] not in ["docker", "podman", "lxc"]
+  failed_when: nginx_restorecon.rc != 0
+  when:
+    - ansible_facts["virtualization_type"] | default("") not in ["docker", "podman", "lxc"]
+    - ansible_selinux.status | default("disabled") == "enabled"
 
 ###############################################################################
 # ENSURING FILESYSTEM CONFIGURATION

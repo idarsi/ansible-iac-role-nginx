@@ -1,0 +1,17 @@
+---
+###############################################################################
+#
+# package_dispatch.yml
+#
+###############################################################################
+
+- name: "Check the package dispatch state"
+  ansible.builtin.assert:
+    that:
+      - iac_package_state in ["present", "absent"]
+    fail_msg: "The package dispatch state must be present or absent."
+
+- name: "Dispatch the main package state"
+  ansible.builtin.include_tasks: "package_{{ iac_package_state }}.yml"
+  vars:
+    iac_package: "{{ iac_dnf_main_package }}"

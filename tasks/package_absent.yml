@@ -3,8 +3,6 @@
 #
 # package_absent.yml
 #
-# @author Arsi Atomi
-#
 ###############################################################################
 
 ###############################################################################
@@ -18,20 +16,22 @@
     fail_msg: "All tests did not pass"
 
 ###############################################################################
-# ENSURING PACKAGE IS PRESENT
+# ENSURING PACKAGE IS ABSENT
 ###############################################################################
 
-- name: "Ensuring packages are installed"
+- name: "Ensuring packages are absent"
   ansible.builtin.dnf:
+  args:
     name: "{{ iac_package }}"
-    sslverify: "{{ dnf_sslverify | default(omit) }}"
-    validate_certs: "{{ dnf_validate_certs | default(omit) }}"
-    disable_gpg_check: "{{ dnf_disable_gpg_check | default(omit) }}"
+    sslverify: "{{ iac_dnf_sslverify | default(dnf_sslverify | default(true)) }}"
+    validate_certs: "{{ iac_dnf_validate_certs | default(dnf_validate_certs | default(true)) }}"
+    disable_gpg_check: "{{ iac_dnf_disable_gpg_check | default(dnf_disable_gpg_check | default(false)) }}"
     state: "absent"
   environment:
     http_proxy: "{{ http_proxy | default(omit) }}"
     https_proxy: "{{ https_proxy | default(omit) }}"
     no_proxy: "{{ no_proxy | default(omit) }}"
+  register: iac_package_operation
   when: iac_package is defined
 
 - name: "Writing log"

@@ -66,6 +66,130 @@
           - "'[internal-nginx]' in (custom_repository_rendering.content | b64decode)"
           - "'[nginx-stable]' not in (custom_repository_rendering.content | b64decode)"
 
+    - name: "Select the available non-protected package override fixture"
+      ansible.builtin.set_fact:
+        # Keep the documented default separate from the test-only override so
+        # the fixture proves that the production package variable is honored.
+        validation_documented_default_package: "nginx"
+        iac_dnf_main_package: "nginx-core"
+        validation_package_fixture_name: "nginx-core"
+
+    - name: "Capture the package fixture baseline"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Verify the package fixture is initially absent"
+      ansible.builtin.assert:
+        that:
+          - validation_documented_default_package == "nginx"
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - validation_package_fixture_name not in ansible_facts.packages
+        fail_msg: >-
+          The test-only package override must differ from the documented default
+          and be absent before the check-mode test.
+
+    - name: "Exercise the production present package path in check mode"
+      ansible.builtin.include_tasks: "tasks/package_override.yml"
+      vars:
+        validation_package_state: "present"
+
+    - name: "Verify the present package path predicts an installation"
+      ansible.builtin.assert:
+        that:
+          - iac_dnf_main_package == validation_package_fixture_name
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - iac_package_operation is defined
+          - iac_package_operation.changed | bool
+          - not (iac_package_operation.failed | default(false) | bool)
+        fail_msg: >-
+          The production present package dispatch did not predict installing the
+          absent {{ validation_package_fixture_name }} package.
+
+    - name: "Exercise the production absent package path in check mode"
+      ansible.builtin.include_tasks: "tasks/package_override.yml"
+      vars:
+        validation_package_state: "absent"
+
+    - name: "Verify the absent package path predicts no mutation"
+      ansible.builtin.assert:
+        that:
+          - iac_dnf_main_package == validation_package_fixture_name
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - iac_package_operation is defined
+          - not (iac_package_operation.changed | bool)
+          - not (iac_package_operation.failed | default(false) | bool)
+        fail_msg: >-
+          The production absent package dispatch predicted an unexpected mutation
+          for the still-absent {{ validation_package_fixture_name }} package.
+
+    - name: "Confirm check-mode package operations did not install the fixture"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Verify the package fixture remains absent"
+      ansible.builtin.assert:
+        that:
+          - validation_package_fixture_name not in ansible_facts.packages
+
+    - name: "Reject string collections with an actionable validation error"
+      block:
+        - name: "Validate a blueprint with a string sites collection"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                sites: "not-a-list"
+        - name: "Record an unexpectedly accepted string collection"
+          ansible.builtin.set_fact:
+            string_collection_rejected: false
+            string_collection_message: "String collection was accepted."
+      rescue:
+        - name: "Record string collection rejection"
+          ansible.builtin.set_fact:
+            string_collection_rejected: true
+            string_collection_message: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify string collection rejection is actionable"
+      ansible.builtin.assert:
+        that:
+          - string_collection_rejected | default(false)
+          - "'iac_blueprint.nginx.sites must be a list' in string_collection_message"
+
+    - name: "Reject mapping values for every public Nginx collection"
+      ansible.builtin.include_tasks: "tasks/reject_collection_type.yml"
+      loop:
+        - "sites"
+        - "directories"
+        - "files"
+        - "binds"
+        - "cron"
+      loop_control:
+        loop_var: nginx_invalid_collection_name
+
+    - name: "Verify mapping collection rejection"
+      ansible.builtin.assert:
+        that:
+          - mapping_collection_results | length == 5
+
+    - name: "Verify each mapping collection rejection is actionable"
+      ansible.builtin.assert:
+        that:
+          - nginx_mapping_result.failed | bool
+          - >-
+            "iac_blueprint.nginx." ~ nginx_mapping_result.name ~ " must be a list" in
+            nginx_mapping_result.message
+        fail_msg: >-
+          The {{ nginx_mapping_result.name }} mapping fixture did not produce the
+          expected actionable collection type error.
+      loop: "{{ mapping_collection_results }}"
+      loop_control:
+        loop_var: nginx_mapping_result
+
     - name: "Reject a reserved server-level proxy root location"
       block:
         - name: "Validate the unsafe proxy blueprint"
