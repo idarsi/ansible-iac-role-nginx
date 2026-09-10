@@ -69,7 +69,15 @@ tests. The test suite does not infer restorecon coverage from
 
 ## Commands
 
-Use the shared environment, without installing dependencies:
+CI installs the pinned `containers.podman` collection from the repository
+root `requirements.yml` after installing the Python test tools. This collection
+provides the `containers.podman.podman_login` and
+`containers.podman.podman_network` modules used by Molecule's Podman plugin.
+Version 1.20.2 supports the repository's pinned ansible-core 2.21.3 (and is
+also available in the shared verification environment).
+
+Use the shared environment for local checks, without installing dependencies
+or collections:
 
 ```bash
 export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
@@ -81,6 +89,13 @@ molecule test -s lifecycle
 molecule test -s check_mode
 molecule test -s functional
 molecule test -s platform-matrix
+```
+
+When running Molecule in a clean environment, install the declared Ansible
+collection before the scenarios:
+
+```bash
+ansible-galaxy collection install --requirements-file requirements.yml
 ```
 
 Pull requests run syntax, production-profile lint, validation, guardrails,
