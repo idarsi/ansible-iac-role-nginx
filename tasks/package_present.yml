@@ -3,8 +3,6 @@
 #
 # package_present.yml
 #
-# @author Arsi Atomi
-#
 ###############################################################################
 
 ###############################################################################
@@ -23,15 +21,17 @@
 
 - name: "Ensuring packages are installed"
   ansible.builtin.dnf:
+  args:
     name: "{{ iac_package }}"
-    sslverify: "{{ iac_dnf_sslverify | default(dnf_sslverify) }}"
-    validate_certs: "{{ iac_dnf_validate_certs | default(dnf_validate_certs) }}"
-    disable_gpg_check: "{{ iac_dnf_disable_gpg_check | default(dnf_disable_gpg_check) }}"
+    sslverify: "{{ iac_dnf_sslverify | default(dnf_sslverify | default(true)) }}"
+    validate_certs: "{{ iac_dnf_validate_certs | default(dnf_validate_certs | default(true)) }}"
+    disable_gpg_check: "{{ iac_dnf_disable_gpg_check | default(dnf_disable_gpg_check | default(false)) }}"
     state: "present"
   environment:
     http_proxy: "{{ http_proxy | default(omit) }}"
     https_proxy: "{{ https_proxy | default(omit) }}"
     no_proxy: "{{ no_proxy | default(omit) }}"
+  register: iac_package_operation
   when: iac_package is defined
 
 - name: "Writing log"

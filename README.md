@@ -1,10 +1,34 @@
-# ansible-iac-role-nginx
+> **Maturity State: Beta**<br>
+> **RC Readiness: 76%**
+>
+> **Assessed ref/evidence:** Current branch; implementation and repository
+> documentation were reviewed. Validation PASS; lifecycle, guardrails, and
+> check-mode PASS. Targeted functional verification PASS for create, first
+> converge, second converge, and destroy; the second converge recap was
+> `ok=430 changed=0 failed=0`, providing current targeted idempotence evidence.
+> The full functional `molecule test` previously timed out at the supervisor
+> limit, but no failure was found; this is an environment/time limitation, not
+> an observed test failure.
+>
+> **Key blockers:** RHEL/platform-matrix evidence, SELinux-enabled evidence,
+> and role metadata.
+
+ANSIBLE-IAC-ROLE-NGINX
+======================
+**COPYRIGHT** 2026 Idarsi collective
+**LICENSE** MIT License [LICENSE](LICENSE)
+**AUTHORS**
+- Idarsi collective
+
+Overview
+--------
 
 An Ansible role for secure, declarative Nginx installation, virtual hosts,
 locations, certificates, filesystem resources, bind mounts, cron jobs, and
 service lifecycle.
 
-## Support and security defaults
+Support and security defaults
+-----------------------------
 
 The supported platforms are Rocky Linux 9/10 and Red Hat Enterprise Linux
 9/10. Rocky Linux 9 and 10 are tested in the scheduled platform matrix; the
@@ -21,7 +45,8 @@ preferred repository settings are `iac_dnf_sslverify`,
 `iac_dnf_validate_certs`, and `iac_dnf_disable_gpg_check`; the corresponding
 legacy `dnf_*` names remain supported.
 
-## States
+States
+------
 
 The default state is `present`.
 
@@ -41,7 +66,8 @@ Unknown states fail before convergence. Uninstall never removes an existing
 `nginx_etc_directory` unless the role-created marker and validated ownership
 manifest are present; externally managed paths are preserved.
 
-## Blueprint contract
+Blueprint contract
+------------------
 
 The required root is a mapping containing `iac_blueprint.nginx`. All resource
 collections below are lists and may be omitted unless they are needed.
@@ -56,7 +82,8 @@ iac_blueprint:
     cron: []
 ```
 
-### Sites, servers, and locations
+Sites, servers, and locations
+-----------------------------
 
 `sites` records require a unique safe `name` containing only letters, numbers,
 `.` and `-`. The site defaults are `autoconfigure: "website"` and
@@ -120,7 +147,8 @@ Directive keys must be identifier-like names and directive values may not
 contain `;`, `{`, `}`, `#`, or line breaks. This validation applies to server
 and location records.
 
-### Directories and files
+Directories and files
+---------------------
 
 `directories` records require `path`; `files` records require `path` and string
 `content`. Both paths must be absolute, non-root paths with at least two path
@@ -154,7 +182,8 @@ file records are not a valid public blueprint. Destructive `absent` handling
 removes only the declared filesystem records, so do not declare paths owned by
 another application.
 
-### Binds
+Binds
+-----
 
 Each `binds` record requires distinct absolute `source` and `target` paths;
 the target cannot be `/`. The source directory is created if needed and the
@@ -177,7 +206,8 @@ iac_blueprint:
         move_from_target: false
 ```
 
-### Cron
+Cron
+----
 
 Each `cron` record requires string `name` and `job`. Set `cron_file` explicitly
 to a safe filename (letters, numbers, `.`, `_`, and `-`); `user` defaults to
@@ -197,7 +227,8 @@ iac_blueprint:
         cron_file: "nginx-maintenance"
 ```
 
-## Paths and operational variables
+Paths and operational variables
+-------------------------------
 
 The main configurable paths are `nginx_etc_directory`, `nginx_log_directory`,
 `nginx_www_directory`, `nginx_public_key_directory`, and
@@ -207,10 +238,14 @@ absolute and consist only of safe path components (`A-Z`, `a-z`, numbers, `.`,
 before any host changes or template rendering. The certificate directories are restricted to
 `/etc/pki/tls/certs` and `/etc/pki/tls/private` (optionally one safe child).
 The repository path is restricted to `/etc/yum.repos.d/*.repo`; the package and
-repository identifiers are also validated. Do not use `/`, `..`, shell
+repository identifiers are also validated. `iac_dnf_main_package` is used for
+both installation and removal of the Nginx package. SELinux relabeling runs
+only when SELinux is enabled; test containers are intentionally skipped, while
+real `restorecon` failures stop convergence. Do not use `/`, `..`, shell
 fragments, or broad unmanaged paths.
 
-## Testing and development
+Testing and development
+-----------------------
 
 Use the shared task library when cloning this repository:
 

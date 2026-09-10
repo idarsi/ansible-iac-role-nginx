@@ -3,8 +3,6 @@
 #
 # absent.yml
 #
-# @author Arsi Atomi
-#
 ###############################################################################
 
 ###############################################################################
@@ -150,9 +148,9 @@
 ###############################################################################
 
 - name: "Ensuring nginx is absent"
-  ansible.builtin.include_tasks: package_absent.yml
+  ansible.builtin.include_tasks: package_dispatch.yml
   vars:
-    iac_package: "nginx"
+    iac_package_state: "absent"
 
 - name: "Remove the role-managed Nginx repository"
   ansible.builtin.file:

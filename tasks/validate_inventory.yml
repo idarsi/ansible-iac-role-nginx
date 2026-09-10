@@ -1,22 +1,4 @@
 ---
-- name: "Validate the Nginx blueprint root"
-  ansible.builtin.assert:
-    that:
-      - iac_blueprint is mapping
-      - iac_blueprint.nginx is defined
-      - iac_blueprint.nginx is mapping
-    fail_msg: "iac_blueprint.nginx must be a mapping."
-
-- name: "Validate Nginx collection types"
-  ansible.builtin.assert:
-    that:
-      - (iac_blueprint.nginx.sites | default([])) is sequence
-      - (iac_blueprint.nginx.directories | default([])) is sequence
-      - (iac_blueprint.nginx.files | default([])) is sequence
-      - (iac_blueprint.nginx.binds | default([])) is sequence
-      - (iac_blueprint.nginx.cron | default([])) is sequence
-    fail_msg: "Nginx sites, directories, files, binds, and cron must be lists."
-
 - name: "Validate role defaults and managed paths"
   ansible.builtin.assert:
     that:
