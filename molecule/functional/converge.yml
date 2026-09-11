@@ -73,6 +73,9 @@
                   - path: "/backend-health"
                     autoconfigure: "proxy"
                     redirect_to: "http://127.0.0.1:8081/health"
+                    deny: "192.0.2.0/24"
+                    allow: "all"
+                    auth_basic: "off"
 
     - name: "Capture repository state before the targeted second convergence"
       ansible.builtin.slurp:
@@ -99,11 +102,14 @@
                   - path: "/backend-health"
                     autoconfigure: "proxy"
                     redirect_to: "http://127.0.0.1:8081/health"
+                    deny: "192.0.2.0/24"
+                    allow: "all"
+                    auth_basic: "off"
 
     - name: "Assert the repository enablement task was unchanged on the second run"
       ansible.builtin.assert:
         that:
-          - not (nginx_repo_enable_changed | bool)
+          - "not (nginx_repo_enable_changed | bool)"
 
     - name: "Create test-only website content"
       ansible.builtin.copy:

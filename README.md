@@ -1,17 +1,40 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 76%**
+> **RC Readiness: 82%**
 >
-> **Assessed ref/evidence:** Current branch; implementation and repository
-> documentation were reviewed. Validation PASS; lifecycle, guardrails, and
-> check-mode PASS. Targeted functional verification PASS for create, first
-> converge, second converge, and destroy; the second converge recap was
-> `ok=430 changed=0 failed=0`, providing current targeted idempotence evidence.
-> The full functional `molecule test` previously timed out at the supervisor
-> limit, but no failure was found; this is an environment/time limitation, not
-> an observed test failure.
+> **Assessed ref/evidence:** Branch `security-hardening-2026-09`, commit
+> `739bc2c`, current working tree. Validation Molecule PASS across all phases
+> (`ok=513 changed=5 failed=0`); lifecycle Molecule PASS across all phases on
+> Rocky Linux 9 (`ok=1010 changed=19 failed=0`); static syntax and production
+> lint checks PASS. The validation scenario includes the staged, tracked-for-
+> delivery `molecule/validation/tasks/security_proxy_validation.yml`; its
+> security-regression evidence is included in the current test delivery.
 >
-> **Key blockers:** RHEL/platform-matrix evidence, SELinux-enabled evidence,
-> and role metadata.
+> **Scorecard:** Scope and public contract `10/12`; functional completeness
+> `17/20`; validation and safety `17.5/20`; convergence and recovery `11/13`;
+> automated testing and CI `18/25`; documentation and release hygiene
+> `9/10`. Total `82.5%`, rounded down to **82%**.
+>
+> **Mandatory cap:** Beta, because the declared RHEL 9/10 support has no
+> automated RHEL evidence and the scheduled Rocky 9/10 matrix is not part of
+> the pull-request checks. The numeric result is also in the Beta band.
+>
+> **RC blockers and smallest next steps:** Publish current guardrail,
+> functional, check-mode, and Rocky 9/10 matrix results; add reproducible RHEL
+> 9/10 evidence or narrow the support contract; add role metadata. SELinux-
+> enabled behavior remains an explicitly documented but untested path.
+
+| Category | Score | Evidence-based breakdown |
+|---|---:|---|
+| Scope and public contract | 10/12 | Purpose 3/3; inputs and states 5/5; support contract 2/4 because RHEL is declared but not automatically tested. |
+| Functional completeness | 17/20 | Core convergence 8/8; lifecycle 6/6; platform/dependency handling 1.5/3; failure/rerun behavior 1.5/3. |
+| Validation and safety | 17.5/20 | Preflight 6/6; secure behavior 6/6; destructive guardrails 2.5/5; check/diff behavior 3/3 with documented command/repository limits. |
+| Convergence and recovery | 11/13 | Idempotent convergence 5/5; state transitions 4/4; operational recovery 2/4. |
+| Automated testing and CI | 18/25 | Static checks 3/3; input validation 4/4; functional verification 3/6; idempotence 4/4; lifecycle/guardrails 2/4; platform matrix 1.5/3; CI enforcement 0.5/1 because no green CI result for this ref was supplied. |
+| Documentation and release hygiene | 9/10 | Operator documentation 4/4; test/limitations 2/2; contribution contract 2/2; metadata 1/2 because role metadata is absent. |
+
+**Production-review status:** Not applicable; the role is not a Release
+ Candidate. This assessment updates `README.md`; the security regression test
+ is staged for tracked delivery, and no commit has been created.
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
@@ -41,6 +64,9 @@ name with `iac_dnf_repo_name`. DNF certificate and GPG
 verification are enabled by default. The role writes private keys as root with
 mode `0600`, validates configuration with `nginx -t` before starting Nginx,
 and only notifies the validation handler when configuration changes. The
+proxy preset enables upstream TLS certificate verification by default for HTTPS
+upstreams (`nginx_proxy_ssl_verify: true`) and renders location access-control
+directives such as `deny`, `allow`, and `auth_basic`.
 preferred repository settings are `iac_dnf_sslverify`,
 `iac_dnf_validate_certs`, and `iac_dnf_disable_gpg_check`; the corresponding
 legacy `dnf_*` names remain supported.
@@ -160,6 +186,10 @@ accounts; the role does not invent accounts or widen permissions. Optional
 Traversal components, empty components, broad parent paths, and protected
 paths such as `/etc/passwd` are rejected before any mutation. Safe paths such
 as `/srv/data` and `/var/www` remain valid.
+The role also resolves managed paths with `realpath -m` before mutation to
+detect parent-symlink resolution into protected roots. This is a preflight
+guard, not an atomic protection against a privileged actor changing a parent
+symlink between validation and the filesystem operation.
 
 ```yaml
 iac_blueprint:

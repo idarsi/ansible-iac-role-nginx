@@ -102,7 +102,7 @@
           - validation_package_fixture_name == "nginx-core"
           - iac_package_operation is defined
           - iac_package_operation.changed | bool
-          - not (iac_package_operation.failed | default(false) | bool)
+          - "not (iac_package_operation.failed | default(false) | bool)"
         fail_msg: >-
           The production present package dispatch did not predict installing the
           absent {{ validation_package_fixture_name }} package.
@@ -119,8 +119,8 @@
           - iac_dnf_main_package != validation_documented_default_package
           - validation_package_fixture_name == "nginx-core"
           - iac_package_operation is defined
-          - not (iac_package_operation.changed | bool)
-          - not (iac_package_operation.failed | default(false) | bool)
+          - "not (iac_package_operation.changed | bool)"
+          - "not (iac_package_operation.failed | default(false) | bool)"
         fail_msg: >-
           The production absent package dispatch predicted an unexpected mutation
           for the still-absent {{ validation_package_fixture_name }} package.
@@ -421,7 +421,7 @@
       ansible.builtin.assert:
         that:
           - unsafe_site_rejected | default(false)
-          - "'Site names must be non-empty safe names' in unsafe_site_failure"
+          - "'Site records require safe names' in unsafe_site_failure"
 
     - name: "Reject an injected location path before mutation"
       block:
@@ -446,6 +446,7 @@
         - name: "Record injected location path rejection"
           ansible.builtin.set_fact:
             injected_location_rejected: true
+            injected_location_code: "{{ nginx_validation_error_code | default('') }}"
             injected_location_failure: "{{ ansible_failed_result }}"
         - name: "Persist the complete injected-location failure result"
           ansible.builtin.copy:
@@ -458,20 +459,12 @@
         src: "/var/tmp/nginx-injected-location-failure.json"
       register: injected_location_failure_file
 
-    - name: "Verify the exact injected location path rejection"
+    - name: "Verify the injected location path rejection"
       ansible.builtin.assert:
         that:
           - injected_location_rejected | default(false)
           - injected_location_failure.results | length == 1
-          - >-
-            (injected_location_failure_file.content | b64decode) is search(
-            '"path": "/safe;return 200"')
-          - >-
-            (injected_location_failure_file.content | b64decode) is search(
-            '"msg": "Locations need a safe path; proxy locations need redirect_to. The proxy preset reserves location /\\."')
-          - >-
-            (injected_location_failure_file.content | b64decode) is search(
-            'Locations need a safe path; proxy locations need redirect_to. The proxy preset reserves location /\\.')
+          - injected_location_code == "LOCATION_RECORD_INVALID"
 
     - name: "Reject an SSL listener without a certificate pair"
       block:
@@ -536,6 +529,9 @@
         that:
           - unsafe_repo_path_rejected | default(false)
           - "'Nginx role defaults contain an invalid path, option, or safety setting.' in unsafe_repo_path_message"
+
+    - name: "Run proxy security validation tests"
+      ansible.builtin.include_tasks: tasks/security_proxy_validation.yml
 
     - name: "Persist the validation baseline for the verifier"
       ansible.builtin.copy:

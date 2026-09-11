@@ -2,11 +2,11 @@
 - name: "Validate the site selected for removal"
   ansible.builtin.assert:
     that:
-      - nginx_site is mapping
-      - nginx_site.name is defined
-      - nginx_site.name is string
-      - nginx_site.name is match('^[A-Za-z0-9.-]+$')
-      - nginx_site.name not in ['.', '..']
+      - "nginx_site is mapping"
+      - "nginx_site.name is defined"
+      - "nginx_site.name is string"
+      - "(nginx_site.name | regex_replace('^[A-Za-z0-9.-]+$', '')) == ''"
+      - "not (nginx_site.name in ['.', '..'])"
     fail_msg: "A safe site record is required to remove a site."
 
 - name: "Check the site ownership marker"
@@ -30,11 +30,11 @@
 - name: "Validate the site ownership manifest before removal"
   ansible.builtin.assert:
     that:
-      - nginx_site_manifest_data.owner == 'ansible-iac-role-nginx'
-      - nginx_site_manifest_data.paths is sequence
-      - nginx_site_manifest_data.paths | select('match', '^/[^/].*') | list | length == nginx_site_manifest_data.paths | length
-      - nginx_site_manifest_data.managed_sites is sequence
-      - nginx_site_manifest_data.managed_sites | select('match', '^[A-Za-z0-9.-]+$') | list | length == nginx_site_manifest_data.managed_sites | length
+      - "nginx_site_manifest_data.owner == 'ansible-iac-role-nginx'"
+      - "nginx_site_manifest_data.paths is sequence"
+      - "(nginx_site_manifest_data.paths | select('match', '^/[^/].*') | list | length) == (nginx_site_manifest_data.paths | length)"
+      - "nginx_site_manifest_data.managed_sites is sequence"
+      - "(nginx_site_manifest_data.managed_sites | select('match', '^[A-Za-z0-9.-]+$') | list | length) == (nginx_site_manifest_data.managed_sites | length)"
     fail_msg: "Refusing site removal: the ownership manifest is invalid or unsafe."
   vars:
     nginx_site_manifest_data: "{{ nginx_site_manifest_raw.content | b64decode | from_yaml }}"
@@ -58,18 +58,21 @@
   ansible.builtin.file:
     path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     state: "absent"
+  notify: "Validate Nginx configuration"
   when: nginx_site_owned | bool
 
 - name: "Remove the role-owned site configuration"
   ansible.builtin.file:
     path: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}"
     state: "absent"
+  notify: "Validate Nginx configuration"
   when: nginx_site_owned | bool
 
 - name: "Remove legacy role-owned split site configurations"
   ansible.builtin.file:
     path: "{{ nginx_etc_directory }}/sites-available/{{ nginx_site.name }}_{{ nginx_legacy_suffix }}"
     state: "absent"
+  notify: "Validate Nginx configuration"
   loop:
     - "80"
     - "443"

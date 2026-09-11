@@ -3,3 +3,4 @@
   ansible.builtin.file:
     path: "{{ nginx_etc_directory }}/sites-enabled/{{ nginx_site.name }}"
     state: "absent"
+  notify: "Validate Nginx configuration"
