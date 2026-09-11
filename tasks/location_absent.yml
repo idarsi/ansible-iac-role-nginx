@@ -2,7 +2,7 @@
 - name: "Validate the site selected for location removal"
   ansible.builtin.assert:
     that:
-      - nginx_site is mapping
+      - "nginx_site is mapping"
       - nginx_site.name is defined
     fail_msg: "A site record is required to remove its locations."
 

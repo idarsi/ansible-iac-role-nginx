@@ -21,7 +21,7 @@
     owner: root
     group: root
     mode: "0700"
-  when: not (nginx_etc_preexisting | bool)
+  when: "not (nginx_etc_preexisting | bool)"
 
 - name: "Write the role ownership marker"
   ansible.builtin.copy:
@@ -30,7 +30,7 @@
     owner: root
     group: root
     mode: "0600"
-  when: not (nginx_etc_preexisting | bool)
+  when: "not (nginx_etc_preexisting | bool)"
 
 - name: "Write the role ownership manifest"
   ansible.builtin.copy:
@@ -44,7 +44,7 @@
     owner: root
     group: root
     mode: "0600"
-  when: not (nginx_etc_preexisting | bool)
+  when: "not (nginx_etc_preexisting | bool)"
 
 - name: "Ensuring openssl is installed"
   ansible.builtin.include_tasks: package_present.yml
@@ -72,7 +72,7 @@
     mode: "0600"
   when:
     - nginx_repo_created_by_role | default(false) | bool
-    - not (nginx_etc_preexisting | bool)
+    - "not (nginx_etc_preexisting | bool)"
 
 ###############################################################################
 # ENSURING NGINX PACKAGE IS PRESENT
@@ -127,7 +127,7 @@
   changed_when: false
   failed_when: nginx_restorecon.rc != 0
   when:
-    - ansible_facts["virtualization_type"] | default("") not in ["docker", "podman", "lxc"]
+    - "not ((ansible_facts[\"virtualization_type\"] | default(\"\")) in [\"docker\", \"podman\", \"lxc\"])"
     - ansible_selinux.status | default("disabled") == "enabled"
 
 ###############################################################################

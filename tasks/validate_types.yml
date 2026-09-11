@@ -2,10 +2,11 @@
 - name: "Validate the Nginx blueprint root type"
   ansible.builtin.assert:
     that:
-      - iac_blueprint is mapping
+      - "iac_blueprint is mapping"
       - iac_blueprint.nginx is defined
-      - iac_blueprint.nginx is mapping
+      - "iac_blueprint.nginx is mapping"
     fail_msg: "iac_blueprint.nginx must be a mapping."
+  no_log: true
 
 - name: "Validate Nginx collection types"
   ansible.builtin.assert:
@@ -27,11 +28,12 @@
   vars:
     nginx_collection_name: "{{ nginx_collection.name }}"
     nginx_collection_value: "{{ nginx_collection.value }}"
+  no_log: true
 
 - name: "Validate Nginx site record types before normalization"
   ansible.builtin.assert:
     that:
-      - nginx_site_record is mapping
+      - "nginx_site_record is mapping"
       - nginx_site_record.servers | default([]) is sequence
       - nginx_site_record.servers | default([]) is not string
       - nginx_site_record.locations | default([]) is sequence
@@ -42,11 +44,12 @@
   loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
   loop_control:
     loop_var: nginx_site_record
+  no_log: true
 
 - name: "Validate nested Nginx record types before normalization"
   ansible.builtin.assert:
     that:
-      - nginx_nested_record is mapping
+      - "nginx_nested_record is mapping"
     fail_msg: >-
       Nginx {{ nginx_nested_record_kind }} records must be mappings; got
       {{ nginx_nested_record | type_debug }}.
@@ -59,3 +62,4 @@
     loop_var: nginx_nested_record
   vars:
     nginx_nested_record_kind: "server or location"
+  no_log: true

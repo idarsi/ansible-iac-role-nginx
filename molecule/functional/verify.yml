@@ -30,6 +30,9 @@
           - "functional_nginx_config.stdout is search('server_name proxy\\.functional\\.example\\.org;')"
           - "functional_nginx_config.stdout is search('location /backend-health \\{')"
           - "functional_nginx_config.stdout is search('proxy_pass http://127\\.0\\.0\\.1:8081/health;')"
+          - "functional_nginx_config.stdout is search('deny 192\\.0\\.2\\.0/24;')"
+          - "functional_nginx_config.stdout is search('allow all;')"
+          - "functional_nginx_config.stdout is search('auth_basic off;')"
         fail_msg: "The generated proxy virtual host is missing the expected SNI host or backend location."
 
     - name: "Verify the repository uses secure defaults"

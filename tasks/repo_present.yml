@@ -14,16 +14,16 @@
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - iac_dnf_main_package is defined
-      - iac_dnf_skip_repo_if_package_available is defined
-      - iac_dnf_repo_path is defined
-      - iac_dnf_repo_name is defined
-      - iac_dnf_main_package is string
-      - iac_dnf_main_package is match('^[A-Za-z0-9][A-Za-z0-9+_.:-]*$')
-      - iac_dnf_repo_path is string
-      - iac_dnf_repo_path is match('^/etc/yum.repos.d/[A-Za-z0-9_.-]+\\.repo$')
-      - iac_dnf_repo_name is string
-      - iac_dnf_repo_name is match('^[A-Za-z0-9_.-]+$')
+      - "iac_dnf_main_package is defined"
+      - "iac_dnf_skip_repo_if_package_available is defined"
+      - "iac_dnf_repo_path is defined"
+      - "iac_dnf_repo_name is defined"
+      - "iac_dnf_main_package is string"
+      - "iac_dnf_main_package is match('^[A-Za-z0-9][A-Za-z0-9+_.:-]*$')"
+      - "iac_dnf_repo_path is string"
+      - "iac_dnf_repo_path is match('^/etc/yum.repos.d/[A-Za-z0-9_.-]+\\.repo$')"
+      - "iac_dnf_repo_name is string"
+      - "iac_dnf_repo_name is match('^[A-Za-z0-9_.-]+$')"
     fail_msg: "All tests did not pass"
 
 ###############################################################################

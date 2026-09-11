@@ -1,3 +1,5 @@
+{% import "macros.j2" as n %}
+
 server {
   listen 80;
   server_name {{ nginx_site.name }};
@@ -6,7 +8,14 @@ server {
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+     proxy_set_header X-Forwarded-Proto $scheme;
+{% if nginx_site.proxy_pass is match('^https://') %}
+     proxy_ssl_verify {{ nginx_site.proxy_ssl_verify | default(nginx_proxy_ssl_verify) | ternary('on', 'off') }};
+     proxy_ssl_server_name on;
+{% endif %}
+{% for k, v in nginx_site.items() if k in ['deny', 'allow', 'auth_basic', 'auth_basic_user_file'] and v is not none %}
+     {{ k }} {{ n.render_value(v) }};
+{% endfor %}
   }
 {% if nginx_render_locations | default(true) and nginx_site.locations is defined %}
 {% for location in nginx_site.locations %}
@@ -14,8 +23,15 @@ server {
     proxy_pass {{ location.redirect_to | default(nginx_site.proxy_pass) }};
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+{% if location.redirect_to | default(nginx_site.proxy_pass) is match('^https://') %}
+     proxy_ssl_verify {{ location.proxy_ssl_verify | default(nginx_site.proxy_ssl_verify | default(nginx_proxy_ssl_verify)) | ternary('on', 'off') }};
+     proxy_ssl_server_name on;
+{% endif %}
+{% for k, v in location.items() if k in ['deny', 'allow', 'auth_basic', 'auth_basic_user_file', 'proxy_set_header', 'proxy_redirect', 'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout', 'proxy_connect_timeout'] and v is not none %}
+     {{ k }} {{ n.render_value(v) }};
+{% endfor %}
   }
 {% endfor %}
 {% endif %}

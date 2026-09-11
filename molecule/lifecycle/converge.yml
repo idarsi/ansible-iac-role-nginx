@@ -16,9 +16,136 @@
                   - path: "/healthz"
                     return: "200 ok"
   tasks:
+    - name: "Check whether the one-time lifecycle transition was completed"
+      ansible.builtin.stat:
+        path: "/var/tmp/nginx-lifecycle-transition-complete"
+      register: lifecycle_transition_marker
+
     - name: "Install and configure the stable lifecycle baseline"
       ansible.builtin.include_role:
         name: "{{ playbook_dir | dirname | dirname }}"
       vars:
         state: "install"
         iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Disable the lifecycle site and trigger safe reload"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_disabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Check the manual site is disabled"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/example.org"
+      register: lifecycle_site_disabled_link
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Verify disabled state and running service"
+      ansible.builtin.service_facts:
+      changed_when: false
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Normalize the fresh running Nginx service facts"
+      ansible.builtin.set_fact:
+        lifecycle_nginx_service: "{{ ansible_facts.services['nginx.service'] | default(ansible_facts.services['nginx'] | default({})) }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Assert manual site disablement was applied safely"
+      ansible.builtin.assert:
+        that:
+          - not lifecycle_site_disabled_link.stat.exists
+          - "lifecycle_nginx_service is mapping"
+          - "lifecycle_nginx_service.state | default('unknown') == 'running'"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Re-enable the lifecycle site and trigger safe reload"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_enabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Check the manual site is enabled"
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/example.org"
+      register: lifecycle_site_enabled_link
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Validate the re-enabled configuration"
+      ansible.builtin.command: "nginx -t"
+      changed_when: false
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Assert manual site enablement was applied safely"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_site_enabled_link.stat.islnk
+          - lifecycle_site_enabled_link.stat.lnk_source == "/etc/nginx/sites-available/example.org"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Stop Nginx before testing a stopped-service configuration change"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "stopped"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Disable the lifecycle site while Nginx is stopped"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_disabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Capture stopped-service state after configuration change"
+      ansible.builtin.service_facts:
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Normalize fresh stopped Nginx service facts"
+      ansible.builtin.set_fact:
+        lifecycle_nginx_service: "{{ ansible_facts.services['nginx.service'] | default(ansible_facts.services['nginx'] | default({})) }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Assert stopped configuration change did not reload Nginx"
+      ansible.builtin.assert:
+        that:
+          - "lifecycle_nginx_service is mapping"
+          - "lifecycle_nginx_service.state | default('unknown') in ['inactive', 'stopped']"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Re-enable the lifecycle site while Nginx is stopped"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_enabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Capture stopped-service state after site re-enable"
+      ansible.builtin.service_facts:
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Normalize fresh stopped Nginx facts after site re-enable"
+      ansible.builtin.set_fact:
+        lifecycle_nginx_service: "{{ ansible_facts.services['nginx.service'] | default(ansible_facts.services['nginx'] | default({})) }}"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Assert stopped service remains stopped after site re-enable"
+      ansible.builtin.assert:
+        that:
+          - "lifecycle_nginx_service is mapping"
+          - "lifecycle_nginx_service.state | default('unknown') in ['inactive', 'stopped']"
+      when: "not lifecycle_transition_marker.stat.exists"
+
+    - name: "Record the completed one-time lifecycle transition"
+      ansible.builtin.file:
+        path: "/var/tmp/nginx-lifecycle-transition-complete"
+        state: "touch"
+        mode: "0600"
+      when: "not lifecycle_transition_marker.stat.exists"

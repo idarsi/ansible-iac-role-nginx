@@ -22,6 +22,7 @@
     nginx_site: {}
     nginx_loop_state: ""
     nginx_manifest_raw: {}
+    nginx_validation_error_code: ""
 
 - name: "Reject unknown Nginx states"
   ansible.builtin.assert:

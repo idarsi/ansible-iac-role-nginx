@@ -2,35 +2,37 @@
 - name: "Validate server records for the current site"
   ansible.builtin.assert:
     that:
-      - nginx_site_server is mapping
-      - nginx_site_server.listen is defined
-      - nginx_site_server.listen is string or nginx_site_server.listen is number
-      - (nginx_site_server.locations | default([])) is sequence
-      - (nginx_site_server.locations | default([])) is not string
-      - >-
-        'ssl' not in (nginx_site_server.listen | string) or
+      - "nginx_site_server is mapping"
+      - "nginx_site_server.listen is defined"
+      - "nginx_site_server.listen is string or nginx_site_server.listen is number"
+      - "(nginx_site_server.locations | default([])) is sequence"
+      - "(nginx_site_server.locations | default([])) is not string"
+      - "'ssl' not in (nginx_site_server.listen | string) or
         ((nginx_site_server.ssl_certificate is defined) and
-        (nginx_site_server.ssl_certificate_key is defined))
-      - nginx_site_record.ssl_certificate_type | default(nginx_default_ssl_certificate_type) != 'none' or 'ssl' not in (nginx_site_server.listen | string)
-      - (nginx_site_server.listen | string) is not search('[;{}#\\r\\n]')
-      - nginx_site_server.server_name | default('') is not search('[;{}#\\r\\n]')
-      - (nginx_site_server.ssl_certificate is defined) == (nginx_site_server.ssl_certificate_key is defined)
-      - nginx_site_server.ssl_certificate is not defined or nginx_site_server.ssl_certificate is string
-      - nginx_site_server.ssl_certificate_key is not defined or nginx_site_server.ssl_certificate_key is string
-      - >-
-        nginx_site_server.ssl_certificate is not defined or
-        nginx_site_server.ssl_certificate is match('^' ~ nginx_public_key_directory ~ '/[A-Za-z0-9_.-]+$')
-      - >-
-        nginx_site_server.ssl_certificate_key is not defined or
-        nginx_site_server.ssl_certificate_key is match('^' ~ nginx_private_key_directory ~ '/[A-Za-z0-9_.-]+$')
-      - nginx_site_server.ssl_certificate is not defined or '..' not in nginx_site_server.ssl_certificate
-      - nginx_site_server.ssl_certificate_key is not defined or '..' not in nginx_site_server.ssl_certificate_key
-      - nginx_site_server.ssl_certificate is not defined or nginx_site_server.ssl_certificate is not search('[;{}#\\r\\n]')
-      - nginx_site_server.ssl_certificate_key is not defined or nginx_site_server.ssl_certificate_key is not search('[;{}#\\r\\n]')
+        (nginx_site_server.ssl_certificate_key is defined))"
+      - "(nginx_site_record.ssl_certificate_type | default(nginx_default_ssl_certificate_type)) != 'none' or 'ssl' not in (nginx_site_server.listen | string)"
+      - "(nginx_site_server.listen | string) is not search('[;{}#\\r\\n]')"
+      - "(nginx_site_server.server_name | default('')) is not search('[;{}#\\r\\n]')"
+      - "(nginx_site_server.ssl_certificate is defined) ==
+        (nginx_site_server.ssl_certificate_key is defined)"
+      - "nginx_site_server.ssl_certificate is not defined or
+        nginx_site_server.ssl_certificate is string"
+      - "nginx_site_server.ssl_certificate_key is not defined or nginx_site_server.ssl_certificate_key is string"
+      - "nginx_site_server.ssl_certificate is not defined or
+        (nginx_site_server.ssl_certificate is match('^' ~ nginx_public_key_directory ~
+        '/[A-Za-z0-9_.-]+$'))"
+      - "nginx_site_server.ssl_certificate_key is not defined or
+        (nginx_site_server.ssl_certificate_key is match('^' ~ nginx_private_key_directory ~
+        '/[A-Za-z0-9_.-]+$'))"
+      - "nginx_site_server.ssl_certificate is not defined or '..' not in nginx_site_server.ssl_certificate"
+      - "nginx_site_server.ssl_certificate_key is not defined or '..' not in nginx_site_server.ssl_certificate_key"
+      - "nginx_site_server.ssl_certificate is not defined or nginx_site_server.ssl_certificate is not search('[;{}#\\r\\n]')"
+      - "nginx_site_server.ssl_certificate_key is not defined or nginx_site_server.ssl_certificate_key is not search('[;{}#\\r\\n]')"
     fail_msg: "SSL listeners require ssl_certificate and ssl_certificate_key under the allowed certificate directories."
   loop: "{{ nginx_site_record.servers | default([]) }}"
   loop_control:
     loop_var: nginx_site_server
+  no_log: true
 
 - name: "Reject duplicate server-level location paths"
   ansible.builtin.assert:
@@ -42,15 +44,15 @@
   loop: "{{ nginx_site_record.servers | default([]) }}"
   loop_control:
     loop_var: nginx_site_server
+  no_log: true
 
 - name: "Reject the reserved proxy root location on server-level locations"
   ansible.builtin.assert:
     that:
-      - >-
-        not (nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) == 'proxy'
-        and (nginx_site_server.locations | default([]) |
-        selectattr('path', 'equalto', '/') | list | length > 0))
+      - "not ((nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure)) == 'proxy' and
+        (nginx_site_server.locations | default([]) | selectattr('path', 'equalto', '/') | list | length > 0))"
     fail_msg: "Proxy sites must not define the reserved root location '/'."
   loop: "{{ nginx_site_record.servers | default([]) }}"
   loop_control:
     loop_var: nginx_site_server
+  no_log: true
