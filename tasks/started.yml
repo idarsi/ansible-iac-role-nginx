@@ -12,7 +12,7 @@
 ###############################################################################
 
 - name: "Test Nginx configuration before service start"
-  ansible.builtin.command: "nginx -t"
+  ansible.builtin.command: "/usr/sbin/nginx -t"
   changed_when: false
 
 - name: "Ensure Nginx is started without changing boot enablement"

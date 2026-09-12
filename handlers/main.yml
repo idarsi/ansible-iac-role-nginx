@@ -4,8 +4,9 @@
   listen: "Validate Nginx configuration"
 
 - name: "Validate Nginx configuration"
-  ansible.builtin.command: "nginx -t"
+  ansible.builtin.command: "/usr/sbin/nginx -t"
   changed_when: false
+  when: nginx_state | default('') not in ['absent', 'uninstall']
   listen: "Validate Nginx configuration"
   notify: "Reload Nginx"
 
