@@ -1,0 +1,26 @@
+---
+- name: "Reject a filesystem path that canonicalizes to root"
+  block:
+    - name: "Validate the root-canonicalizing filesystem path"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            directories:
+              - path: "{{ validation_root_canonical_path }}"
+            sites: []
+    - name: "Record an unexpectedly accepted root-canonicalizing path"
+      ansible.builtin.set_fact:
+        root_canonical_path_results: >-
+          {{ (root_canonical_path_results | default([])) +
+          [{'path': validation_root_canonical_path, 'rejected': false, 'code': '', 'message': ''}] }}
+  rescue:
+    - name: "Record the expected root-canonicalizing path rejection"
+      ansible.builtin.set_fact:
+        root_canonical_path_results: >-
+          {{ (root_canonical_path_results | default([])) +
+          [{'path': validation_root_canonical_path, 'rejected': true,
+          'code': nginx_validation_error_code | default(''),
+          'message': ansible_failed_result | to_nice_json}] }}

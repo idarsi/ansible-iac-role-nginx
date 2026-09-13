@@ -58,6 +58,7 @@ nginx_certificate_public_key_days: 365
 nginx_default_site_autoconfigure: website
 nginx_default_ssl_certificate_type: selfsigned
 nginx_proxy_ssl_verify: true
+nginx_proxy_ssl_trusted_certificate: "/etc/pki/tls/certs/ca-bundle.crt"
 
 
 # Uninstall is deliberately opt-in because it can remove application data.

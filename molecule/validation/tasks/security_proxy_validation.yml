@@ -147,6 +147,74 @@
         security_validation_unsupported_location_rejected: true
         security_validation_unsupported_location_code: "{{ nginx_validation_error_code | default('') }}"
 
+- name: "Reject an unsafe upstream CA bundle path"
+  block:
+    - name: "Validate the unsafe upstream CA bundle path"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        nginx_proxy_ssl_trusted_certificate: "relative/ca-bundle.crt"
+        iac_blueprint:
+          nginx:
+            sites: []
+  rescue:
+    - name: "Record the expected upstream CA bundle path rejection"
+      ansible.builtin.set_fact:
+        security_validation_ca_path_rejected: true
+        security_validation_ca_path_message: "{{ ansible_failed_result.msg | default('') }}"
+
+- name: "Accept an absent CA file when HTTPS upstream verification is disabled"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "validate"
+    nginx_proxy_ssl_trusted_certificate: "/var/tmp/nginx-unused-ca.crt"
+    iac_blueprint:
+      nginx:
+        sites:
+          - name: "unverified-upstream.example.org"
+            autoconfigure: "proxy"
+            proxy_pass: "https://backend.example.org"
+            proxy_ssl_verify: false
+
+- name: "Reject a missing CA file when HTTPS upstream verification is enabled"
+  block:
+    - name: "Validate the missing required upstream CA file"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        nginx_proxy_ssl_trusted_certificate: "/var/tmp/nginx-missing-ca.crt"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "verified-upstream.example.org"
+                autoconfigure: "proxy"
+                proxy_pass: "https://backend.example.org"
+  rescue:
+    - name: "Record the expected missing upstream CA rejection"
+      ansible.builtin.set_fact:
+        security_validation_missing_ca_rejected: true
+        security_validation_missing_ca_message: "{{ ansible_failed_result.msg | default('') }}"
+
+- name: "Accept a CA file managed by the same install blueprint"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "validate"
+    nginx_proxy_ssl_trusted_certificate: "/var/tmp/nginx-managed-ca.crt"
+    iac_blueprint:
+      nginx:
+        files:
+          - path: "/var/tmp/nginx-managed-ca.crt"
+            content: "test-only CA fixture"
+            mode: "0644"
+        sites:
+          - name: "managed-ca-upstream.example.org"
+            autoconfigure: "proxy"
+            proxy_pass: "https://backend.example.org"
+
 - name: "Render HTTPS proxy security defaults and overrides"
   ansible.builtin.set_fact:
     security_validation_https_default: >-
@@ -155,6 +223,7 @@
       'nginx_public_key_directory': '/etc/pki/tls/certs',
       'nginx_private_key_directory': '/etc/pki/tls/private',
       'nginx_proxy_ssl_verify': true,
+      'nginx_proxy_ssl_trusted_certificate': '/etc/pki/tls/certs/test-ca-bundle.crt',
       'nginx_render_locations': true}) }}
     security_validation_https_override: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_443.j2', template_vars={
@@ -162,6 +231,7 @@
       'nginx_public_key_directory': '/etc/pki/tls/certs',
       'nginx_private_key_directory': '/etc/pki/tls/private',
        'nginx_proxy_ssl_verify': true,
+       'nginx_proxy_ssl_trusted_certificate': '/etc/pki/tls/certs/test-ca-bundle.crt',
        'nginx_render_locations': true}) }}
     security_validation_https_location_default: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_443.j2', template_vars={
@@ -170,6 +240,7 @@
       'nginx_public_key_directory': '/etc/pki/tls/certs',
       'nginx_private_key_directory': '/etc/pki/tls/private',
       'nginx_proxy_ssl_verify': true,
+      'nginx_proxy_ssl_trusted_certificate': '/etc/pki/tls/certs/test-ca-bundle.crt',
       'nginx_render_locations': true}) }}
     security_validation_https_location_site_override: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_443.j2', template_vars={
@@ -178,6 +249,7 @@
       'nginx_public_key_directory': '/etc/pki/tls/certs',
       'nginx_private_key_directory': '/etc/pki/tls/private',
       'nginx_proxy_ssl_verify': true,
+      'nginx_proxy_ssl_trusted_certificate': '/etc/pki/tls/certs/test-ca-bundle.crt',
       'nginx_render_locations': true}) }}
     security_validation_https_location_override: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_443.j2', template_vars={
@@ -186,11 +258,23 @@
       'nginx_public_key_directory': '/etc/pki/tls/certs',
       'nginx_private_key_directory': '/etc/pki/tls/private',
       'nginx_proxy_ssl_verify': true,
+      'nginx_proxy_ssl_trusted_certificate': '/etc/pki/tls/certs/test-ca-bundle.crt',
       'nginx_render_locations': true}) }}
-    security_validation_http_access: >-
+    security_validation_http_allowlist: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_http.j2', template_vars={
-       'nginx_site': {'name': 'access.example.org', 'proxy_pass': 'http://backend.example.org',
-        'locations': [{'path': '/private', 'deny': '192.0.2.0/24', 'allow': 'all', 'auth_basic': false}]},
+       'nginx_site': {'name': 'allowlist.example.org', 'proxy_pass': 'http://backend.example.org',
+         'allow': '192.0.2.0/24', 'deny': 'all', 'auth_basic': 'restricted',
+         'auth_basic_user_file': '/etc/nginx/access.htpasswd',
+         'locations': [{'path': '/private', 'deny': '203.0.113.0/24',
+         'auth_basic': 'location restricted'},
+         {'path': '/full-denylist', 'deny': '203.0.113.0/24', 'allow': 'all'}]},
+       'nginx_render_locations': true}) }}
+    security_validation_http_denylist: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_http.j2', template_vars={
+       'nginx_site': {'name': 'denylist.example.org', 'proxy_pass': 'http://backend.example.org',
+         'deny': '192.0.2.0/24', 'allow': 'all',
+         'locations': [{'path': '/private', 'allow': '198.51.100.0/24'},
+         {'path': '/full-allowlist', 'allow': '198.51.100.0/24', 'deny': 'all'}]},
        'nginx_render_locations': true}) }}
     security_validation_manual_location: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site.j2', template_vars={
@@ -212,10 +296,15 @@
       - security_validation_server_access_code == "SERVER_ACCESS_CONTROL_INVALID"
       - security_validation_unsupported_location_rejected | default(false) | bool
       - security_validation_unsupported_location_code == "LOCATION_ACCESS_CONTROL_INVALID"
+      - security_validation_ca_path_rejected | default(false) | bool
+      - "'Nginx role defaults contain an invalid path, option, or safety setting.' in security_validation_ca_path_message"
+      - security_validation_missing_ca_rejected | default(false) | bool
+      - "'HTTPS upstream verification requires nginx_proxy_ssl_trusted_certificate' in security_validation_missing_ca_message"
       - security_validation_string_site_code == "SITE_PROXY_SSL_VERIFY_INVALID"
       - security_validation_string_location_code == "LOCATION_PROXY_SSL_VERIFY_INVALID"
       - "'proxy_ssl_verify on;' in security_validation_https_default"
       - "'proxy_ssl_server_name on;' in security_validation_https_default"
+      - "'proxy_ssl_trusted_certificate /etc/pki/tls/certs/test-ca-bundle.crt;' in security_validation_https_default"
       - "'proxy_ssl_verify on;' in security_validation_https_location_default"
       - "'proxy_ssl_server_name on;' in security_validation_https_location_default"
       - "'proxy_ssl_verify off;' in security_validation_https_location_site_override"
@@ -227,10 +316,30 @@
       - "'auth_basic off;' in security_validation_https_default"
       - "'proxy_ssl_verify off;' in security_validation_https_override"
       - "'proxy_ssl_server_name on;' in security_validation_https_override"
-      - "'deny 192.0.2.0/24;' in security_validation_http_access"
-      - "'allow all;' in security_validation_http_access"
-      - "'auth_basic off;' in security_validation_http_access"
-      - "'autoconfigure' not in security_validation_http_access"
+      - >-
+        security_validation_http_allowlist is search(
+        '(?s)location / \\{.*?allow 192\\.0\\.2\\.0/24;\\s+deny all;')
+      - >-
+        security_validation_http_allowlist is search(
+        '(?s)location /private \\{.*?allow 192\\.0\\.2\\.0/24;\\s+deny 203\\.0\\.113\\.0/24;')
+      - >-
+        security_validation_http_denylist is search(
+        '(?s)location / \\{.*?deny 192\\.0\\.2\\.0/24;\\s+allow all;')
+      - >-
+        security_validation_http_denylist is search(
+        '(?s)location /private \\{.*?deny 192\\.0\\.2\\.0/24;\\s+allow 198\\.51\\.100\\.0/24;')
+      - >-
+        security_validation_http_allowlist is search(
+        '(?s)location /full-denylist \\{.*?deny 203\\.0\\.113\\.0/24;\\s+allow all;')
+      - >-
+        security_validation_http_denylist is search(
+        '(?s)location /full-allowlist \\{.*?allow 198\\.51\\.100\\.0/24;\\s+deny all;')
+      - "security_validation_http_allowlist | regex_findall('auth_basic_user_file /etc/nginx/access\\.htpasswd;') | length == 3"
+      - >-
+        'auth_basic "restricted";' in security_validation_http_allowlist
+      - >-
+        'auth_basic "location restricted";' in security_validation_http_allowlist
+      - "'autoconfigure' not in security_validation_http_allowlist"
       - "'deny all;' not in security_validation_https_default"
       - "'redirect_to http://backend.example.org/manual;' in security_validation_manual_location"
       - "'proxy_ssl_verify off;' in security_validation_manual_location"

@@ -1,0 +1,36 @@
+---
+- name: "Require upstream CA for the proxy site root"
+  ansible.builtin.set_fact:
+    nginx_proxy_ssl_ca_required: true
+  when:
+    - nginx_proxy_ssl_site_record.autoconfigure | default(nginx_default_site_autoconfigure) == 'proxy'
+    - nginx_proxy_ssl_site_record.proxy_pass is match('^https://')
+    - nginx_proxy_ssl_site_record.proxy_ssl_verify | default(nginx_proxy_ssl_verify) | bool
+
+- name: "Require upstream CA for proxy-preset site locations"
+  ansible.builtin.set_fact:
+    nginx_proxy_ssl_ca_required: true
+  loop: "{{ nginx_proxy_ssl_site_record.locations | default([]) }}"
+  loop_control:
+    loop_var: nginx_proxy_ssl_location_record
+  when:
+    - nginx_proxy_ssl_site_record.autoconfigure | default(nginx_default_site_autoconfigure) == 'proxy'
+    - nginx_proxy_ssl_location_record.redirect_to | default(nginx_proxy_ssl_site_record.proxy_pass) is match('^https://')
+    - >-
+      nginx_proxy_ssl_location_record.proxy_ssl_verify |
+      default(nginx_proxy_ssl_site_record.proxy_ssl_verify |
+      default(nginx_proxy_ssl_verify)) | bool
+
+- name: "Require upstream CA for manual proxy locations"
+  ansible.builtin.set_fact:
+    nginx_proxy_ssl_ca_required: true
+  loop: >-
+    {{ nginx_proxy_ssl_site_record.servers | default([]) |
+    map(attribute='locations') | select('defined') | list | flatten }}
+  loop_control:
+    loop_var: nginx_proxy_ssl_location_record
+  when:
+    - nginx_proxy_ssl_site_record.autoconfigure | default(nginx_default_site_autoconfigure) == 'none'
+    - nginx_proxy_ssl_location_record.autoconfigure | default('none') == 'proxy'
+    - nginx_proxy_ssl_location_record.redirect_to is match('^https://')
+    - nginx_proxy_ssl_location_record.proxy_ssl_verify | default(nginx_proxy_ssl_verify) | bool

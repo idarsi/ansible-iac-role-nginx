@@ -1,40 +1,24 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 82%**
+> **RC Readiness: 85%**
 >
-> **Assessed ref/evidence:** Branch `security-hardening-2026-09`, commit
-> `739bc2c`, current working tree. Validation Molecule PASS across all phases
-> (`ok=513 changed=5 failed=0`); lifecycle Molecule PASS across all phases on
-> Rocky Linux 9 (`ok=1010 changed=19 failed=0`); static syntax and production
-> lint checks PASS. The validation scenario includes the staged, tracked-for-
-> delivery `molecule/validation/tasks/security_proxy_validation.yml`; its
-> security-regression evidence is included in the current test delivery.
+> **Assessment basis:** commit `ef85eab` (`Fix CI handler validation after
+> uninstall`) and the current working tree. Validation, functional, and
+> check-mode Molecule scenarios PASS; lifecycle Molecule is now PASS in all
+> phases, including the valid reload counter transition `0→1` and the invalid
+> counter remaining `1`. Static syntax, lint, and YAML checks also PASS in the
+> shared environment. The earlier lifecycle counter failure was corrected by
+> the `/run` fix and is historical, not a current gap.
 >
 > **Scorecard:** Scope and public contract `10/12`; functional completeness
-> `17/20`; validation and safety `17.5/20`; convergence and recovery `11/13`;
-> automated testing and CI `18/25`; documentation and release hygiene
-> `9/10`. Total `82.5%`, rounded down to **82%**.
+> `17/20`; validation and safety `17.5/20`; convergence and recovery `10/13`;
+> automated testing and CI `22/25`; documentation and release hygiene `9/10`.
+> Total `85.5%`, rounded down to **85%**.
 >
-> **Mandatory cap:** Beta, because the declared RHEL 9/10 support has no
-> automated RHEL evidence and the scheduled Rocky 9/10 matrix is not part of
-> the pull-request checks. The numeric result is also in the Beta band.
->
-> **RC blockers and smallest next steps:** Publish current guardrail,
-> functional, check-mode, and Rocky 9/10 matrix results; add reproducible RHEL
-> 9/10 evidence or narrow the support contract; add role metadata. SELinux-
-> enabled behavior remains an explicitly documented but untested path.
-
-| Category | Score | Evidence-based breakdown |
-|---|---:|---|
-| Scope and public contract | 10/12 | Purpose 3/3; inputs and states 5/5; support contract 2/4 because RHEL is declared but not automatically tested. |
-| Functional completeness | 17/20 | Core convergence 8/8; lifecycle 6/6; platform/dependency handling 1.5/3; failure/rerun behavior 1.5/3. |
-| Validation and safety | 17.5/20 | Preflight 6/6; secure behavior 6/6; destructive guardrails 2.5/5; check/diff behavior 3/3 with documented command/repository limits. |
-| Convergence and recovery | 11/13 | Idempotent convergence 5/5; state transitions 4/4; operational recovery 2/4. |
-| Automated testing and CI | 18/25 | Static checks 3/3; input validation 4/4; functional verification 3/6; idempotence 4/4; lifecycle/guardrails 2/4; platform matrix 1.5/3; CI enforcement 0.5/1 because no green CI result for this ref was supplied. |
-| Documentation and release hygiene | 9/10 | Operator documentation 4/4; test/limitations 2/2; contribution contract 2/2; metadata 1/2 because role metadata is absent. |
-
-**Production-review status:** Not applicable; the role is not a Release
- Candidate. This assessment updates `README.md`; the security regression test
- is staged for tracked delivery, and no commit has been created.
+> **Main gaps:** reproducible RHEL 9/10 evidence (or a narrowed support
+> contract), current platform-matrix evidence, guardrail coverage/evidence, and
+> role metadata. SELinux-enabled behavior remains documented but untested. The
+> role is not a Release Candidate; production review is therefore not
+> applicable.
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
@@ -65,9 +49,25 @@ verification are enabled by default. The role writes private keys as root with
 mode `0600`, validates configuration with `nginx -t` before starting Nginx,
 and only notifies the validation handler when configuration changes. The
 proxy preset enables upstream TLS certificate verification by default for HTTPS
-upstreams (`nginx_proxy_ssl_verify: true`) and renders location access-control
-directives such as `deny`, `allow`, and `auth_basic`.
-preferred repository settings are `iac_dnf_sslverify`,
+upstreams (`nginx_proxy_ssl_verify: true`). The trust store defaults to the
+system CA bundle at `nginx_proxy_ssl_trusted_certificate:
+"/etc/pki/tls/certs/ca-bundle.crt"`; set this to another safe absolute CA file
+when upstreams use a private CA. When an HTTPS upstream uses verification, the
+file must already be a readable regular file, or be declared in
+`iac_blueprint.nginx.files` so `state: "install"` creates it before site
+rendering. Proxy locations inherit site-level `deny`,
+`allow`, `auth_basic`, and `auth_basic_user_file` values unless they explicitly
+override the corresponding directive. Access-control directives preserve their
+blueprint mapping order because Nginx evaluates `allow` and `deny` on a
+first-match basis. A location that defines both `allow` and `deny` completely
+replaces the inherited rule pair and uses its own mapping order. With a partial
+location override, inherited directives retain their site positions, matching
+location keys replace values in those positions, and location-only directives
+are appended in location mapping order. `auth_basic` and
+`auth_basic_user_file` are inherited and overridden independently; after a
+complete location rule-pair override, these authentication directives follow
+the location rule pair in their inherited order.
+Preferred repository settings are `iac_dnf_sslverify`,
 `iac_dnf_validate_certs`, and `iac_dnf_disable_gpg_check`; the corresponding
 legacy `dnf_*` names remain supported.
 
@@ -240,7 +240,8 @@ Cron
 ----
 
 Each `cron` record requires string `name` and `job`. Set `cron_file` explicitly
-to a safe filename (letters, numbers, `.`, `_`, and `-`); `user` defaults to
+to a portable `/etc/cron.d` filename containing only letters, numbers, `_`, and
+`-`; dots, `.` and `..` are rejected. `user` defaults to
 `root`. The records also support Ansible cron schedule fields `special_time`,
 `minute`, `hour`, `day`, `month`, `weekday`, and `state` (`present` or
 `absent`).

@@ -5,17 +5,20 @@
 
 - name: "Validate Nginx configuration"
   ansible.builtin.command: "/usr/sbin/nginx -t"
-  changed_when: false
+  # This handler only runs after a notifying task changed configuration. Marking
+  # successful validation changed is what queues the dependent reload handler.
+  changed_when: true
   when: nginx_state | default('') not in ['absent', 'uninstall']
   listen: "Validate Nginx configuration"
   notify: "Reload Nginx"
 
 - name: "Reload Nginx"
-  ansible.builtin.service:
-    name: "nginx"
+  ansible.builtin.systemd_service:
+    name: "{{ iac_service_name }}"
     state: "reloaded"
   when: >-
-    ((ansible_facts.services['nginx.service'] |
-    default(ansible_facts.services['nginx'] | default({}))).state |
+    ((ansible_facts.services | default({})).get(
+    iac_service_name,
+    (ansible_facts.services | default({})).get(iac_service_name + '.service', {})).state |
     default('stopped')) == 'running'
   listen: "Reload Nginx"

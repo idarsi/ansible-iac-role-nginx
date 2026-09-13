@@ -32,6 +32,10 @@
       - "nginx_default_site_autoconfigure in ['none', 'website', 'proxy']"
       - "nginx_default_ssl_certificate_type in ['none', 'selfsigned']"
       - "nginx_proxy_ssl_verify is boolean"
+      - "(nginx_proxy_ssl_trusted_certificate | type_debug) == 'str'"
+      - "nginx_proxy_ssl_trusted_certificate is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$')"
+      - "'..' not in nginx_proxy_ssl_trusted_certificate.split('/')"
+      - "nginx_proxy_ssl_trusted_certificate is not search('[;{}#\\r\\n]')"
       - "nginx_uninstall_confirm is boolean"
       - "nginx_uninstall_remove_config is boolean"
       - "(iac_dnf_repo_path | type_debug) == 'str'"
@@ -162,10 +166,20 @@
     loop_var: nginx_canonical_guard_path
   no_log: true
 
+- name: "Classify managed paths that canonicalize to root"
+  ansible.builtin.set_fact:
+    nginx_validation_error_code: "CANONICAL_PATH_PROTECTED_ROOT"
+  loop: "{{ nginx_canonical_guard_results.results }}"
+  loop_control:
+    loop_var: nginx_canonical_guard_result
+  when: nginx_canonical_guard_result.stdout == '/'
+  no_log: true
+
 - name: "Reject canonical paths reaching protected roots"
   ansible.builtin.assert:
     that:
       - nginx_canonical_guard_result.rc == 0
+      - nginx_canonical_guard_result.stdout != '/'
       - >-
         nginx_canonical_guard_result.stdout is not match(
         '^/(?:etc$|var$|var/(?:lib|log|cache)(?:/|$)|usr$|usr/local(?:/|$)|home$|root$|etc/(?:passwd|shadow|group|gshadow|sudoers|hosts|fstab|ssh|systemd)(?:/|$)|root/\\.ssh(?:/|$))')
@@ -173,7 +187,6 @@
   loop: "{{ nginx_canonical_guard_results.results }}"
   loop_control:
     loop_var: nginx_canonical_guard_result
-  no_log: true
 
 - name: "Validate cron records"
   ansible.builtin.assert:
@@ -184,7 +197,7 @@
       - nginx_cron_record.job is defined
       - (nginx_cron_record.job | type_debug) == 'str'
       - ((nginx_cron_record.cron_file | default('nginx-maintenance')) | type_debug) == 'str'
-       - "(nginx_cron_record.cron_file | default('nginx-maintenance')) is match('^[A-Za-z0-9_.-]+$')"
+      - "(nginx_cron_record.cron_file | default('nginx-maintenance')) is match('^[A-Za-z0-9_-]+$')"
     fail_msg: "Cron records need a name, string job, and safe cron_file name."
   loop: "{{ iac_blueprint.nginx.cron | default([]) }}"
   loop_control:

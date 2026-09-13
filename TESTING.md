@@ -24,7 +24,9 @@ automatically covered here.
    and bind source/target traversal and unsafe paths in both validation and
    absent states, with exact failure messages and preservation of pre-existing
    state. It also renders a custom DNF repository section without contacting an
-  external repository. Check-mode fixtures execute the production present and
+  external repository. Proxy tests verify access-rule ordering, quoted
+  authentication realms, conditional CA-file preflight, and same-run managed
+  CA files. Check-mode fixtures include the public test CA and execute the production present and
   absent package dispatch paths using the hardcoded test-only `nginx-core`
   override. Both package operations run in check mode without installing or
   removing a package. The baseline
@@ -41,7 +43,11 @@ automatically covered here.
 * `lifecycle` verifies public `present`, `absent`, `uninstall`, site/location
   present/absent, enable/disable, and service stopped/started transitions.
   It verifies that the `started` state preserves a service's disabled boot
-  enablement.
+  enablement. A test-only systemd drop-in replaces `ExecReload` with an atomic
+  counting wrapper around the real `/usr/sbin/nginx -s reload` command. The
+  scenario proves that a valid configuration change increments the direct
+  reload count exactly once and replaces workers, while failed validation does
+  not increment the count. An `always` cleanup restores the original unit.
   For repeated location removal it compares the rendered file content before
   and after the repeat. For repeated public absent and site absent it compares
   the observed package/path existence results. For repeated present it compares
@@ -52,10 +58,15 @@ automatically covered here.
   existence, checksums, and modes before and after representative check+diff
   convergence. It separately compares the repository path and content; the
   repository is expected to remain absent because check mode does not preview
-  that repository operation. OpenSSL key generation and repository/package
+  that repository operation. Its file fixture passes fake secret-bearing
+  content through the shared filesystem wrapper under `--diff`; the wrapper
+  applies `no_log` and disables diffs for the entire shared include path.
+  OpenSSL key generation and repository/package
   command behavior are not claimed as safely previewable, but the test proves
   that this limitation does not mutate the repository path.
-* `functional` runs `nginx -t`, checks HTTPS/GPG repository defaults and private
+* `functional` manages a valid public self-signed test CA through the blueprint,
+  renders it as an HTTPS upstream trust store in the same install run, runs
+  `nginx -t`, checks HTTPS/GPG repository defaults and private
   key mode `0600`, and verifies local HTTP-to-HTTPS redirect plus an actual
   HTTPS reverse-proxy response from a test-only backend on `127.0.0.1:8081`.
 * `platform-matrix` repeats the baseline on Rocky Linux 9 and 10. Privileged

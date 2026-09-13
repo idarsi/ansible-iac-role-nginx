@@ -1,0 +1,36 @@
+---
+- name: "Determine HTTPS upstream trust requirements by site"
+  ansible.builtin.include_tasks: proxy_ssl_site_preflight.yml
+  loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
+  loop_control:
+    loop_var: nginx_proxy_ssl_site_record
+
+- name: "Determine whether this run manages the required upstream CA file"
+  ansible.builtin.set_fact:
+    nginx_proxy_ssl_ca_managed_this_run: >-
+      {{ nginx_state in ['validate', 'install'] and
+      (iac_blueprint.nginx.files | default([]) |
+      selectattr('path', 'equalto', nginx_proxy_ssl_trusted_certificate) |
+      list | length) > 0 }}
+
+- name: "Inspect the required upstream CA file before host changes"
+  ansible.builtin.stat:
+    path: "{{ nginx_proxy_ssl_trusted_certificate }}"
+  register: nginx_proxy_ssl_ca_stat
+  when:
+    - nginx_proxy_ssl_ca_required | bool
+    - not (nginx_proxy_ssl_ca_managed_this_run | bool)
+
+- name: "Require a readable upstream CA file before host changes"
+  ansible.builtin.assert:
+    that:
+      - nginx_proxy_ssl_ca_stat.stat.exists
+      - nginx_proxy_ssl_ca_stat.stat.isreg
+      - nginx_proxy_ssl_ca_stat.stat.readable
+    fail_msg: >-
+      HTTPS upstream verification requires nginx_proxy_ssl_trusted_certificate
+      to reference an existing readable regular CA file, or a file managed by
+      iac_blueprint.nginx.files during state=install.
+  when:
+    - nginx_proxy_ssl_ca_required | bool
+    - not (nginx_proxy_ssl_ca_managed_this_run | bool)

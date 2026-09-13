@@ -1,0 +1,236 @@
+---
+- name: "Instrument and verify the Nginx systemd reload path"
+  block:
+    - name: "Create the test-only reload wrapper directory"
+      ansible.builtin.file:
+        path: "/usr/local/libexec"
+        state: "directory"
+        owner: "root"
+        group: "root"
+        mode: "0755"
+
+    - name: "Install the atomic test-only Nginx reload wrapper"
+      ansible.builtin.copy:
+        dest: "/usr/local/libexec/nginx-handler-reload-wrapper"
+        owner: "root"
+        group: "root"
+        mode: "0755"
+        content: |
+          #!/usr/bin/python3
+          import fcntl
+          import os
+          from pathlib import Path
+          import subprocess
+
+          counter = Path("/run/nginx-handler-reload-count")
+          lock_path = Path(str(counter) + ".lock")
+
+          with lock_path.open("a+", encoding="utf-8") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX)
+              count = int(counter.read_text().strip()) if counter.exists() else 0
+              temporary = Path(f"{counter}.{os.getpid()}.tmp")
+              temporary.write_text(f"{count + 1}\n", encoding="utf-8")
+              os.chmod(temporary, 0o600)
+              os.replace(temporary, counter)
+          subprocess.run(["/usr/sbin/nginx", "-s", "reload"], check=True)
+
+    - name: "Create the Nginx systemd drop-in directory"
+      ansible.builtin.file:
+        path: "/etc/systemd/system/nginx.service.d"
+        state: "directory"
+        owner: "root"
+        group: "root"
+        mode: "0755"
+
+    - name: "Override the real Nginx systemd reload command"
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/nginx.service.d/handler-regression.conf"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+        content: |
+          [Service]
+          ExecReload=
+          ExecReload=/usr/bin/python3 /usr/local/libexec/nginx-handler-reload-wrapper
+
+    - name: "Reload systemd after installing the Nginx reload drop-in"
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: "Verify systemd loaded the test-only Nginx reload drop-in"
+      ansible.builtin.command:
+        argv:
+          - "systemctl"
+          - "cat"
+          - "nginx.service"
+      register: lifecycle_nginx_unit_with_reload_wrapper
+      changed_when: false
+
+    - name: "Read the effective Nginx reload property"
+      ansible.builtin.command:
+        argv:
+          - "systemctl"
+          - "show"
+          - "nginx.service"
+          - "-p"
+          - "ExecReload"
+          - "--value"
+      register: lifecycle_effective_exec_reload
+      changed_when: false
+
+    - name: "Check the test-only reload wrapper"
+      ansible.builtin.stat:
+        path: "/usr/local/libexec/nginx-handler-reload-wrapper"
+      register: lifecycle_nginx_reload_wrapper
+
+    - name: "Assert the active Nginx unit includes the reload drop-in and wrapper"
+      ansible.builtin.assert:
+        that:
+          - >-
+            lifecycle_nginx_unit_with_reload_wrapper.stdout is search(
+            'handler-regression.conf')
+          - >-
+            lifecycle_effective_exec_reload.stdout is search(
+            '/usr/local/libexec/nginx-handler-reload-wrapper')
+          - lifecycle_nginx_reload_wrapper.stat.exists
+          - lifecycle_nginx_reload_wrapper.stat.executable
+
+    - name: "Restart Nginx after loading the test-only unit drop-in"
+      ansible.builtin.systemd_service:
+        name: "nginx.service"
+        state: "restarted"
+
+    - name: "Allow the restarted Nginx process generation to settle"
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: "Initialize the atomic reload counter"
+      ansible.builtin.copy:
+        content: "0\n"
+        dest: "/run/nginx-handler-reload-count"
+        owner: "root"
+        group: "root"
+        mode: "0600"
+
+    - name: "Read the initialized reload counter"
+      ansible.builtin.slurp:
+        src: "/run/nginx-handler-reload-count"
+      register: lifecycle_reload_count_baseline
+
+    - name: "Assert no reload occurred during fixture setup"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_reload_count_baseline.content | b64decode | trim == "0"
+
+    - name: "Capture the Nginx process generation before a valid change"
+      ansible.builtin.command:
+        argv:
+          - "python3"
+          - "-c"
+          - >-
+            from pathlib import Path;
+            master = Path('/run/nginx.pid').read_text().strip();
+            children = Path(f'/proc/{master}/task/{master}/children').read_text().split();
+            print(f'{master}:' + ','.join(sorted(children, key=int)))
+      register: lifecycle_nginx_generation_before_reload
+      changed_when: false
+
+    - name: "Disable the lifecycle site to trigger validation and reload"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "site_disabled"
+        iac_blueprint: "{{ lifecycle_blueprint }}"
+
+    - name: "Flush validation and reload handlers for the valid change"
+      ansible.builtin.meta: flush_handlers
+
+    - name: "Read the reload count after the valid change"
+      ansible.builtin.slurp:
+        src: "/run/nginx-handler-reload-count"
+      register: lifecycle_reload_count_after_valid_change
+
+    - name: "Wait for the successful reload to replace Nginx workers"
+      ansible.builtin.command:
+        argv:
+          - "python3"
+          - "-c"
+          - >-
+            from pathlib import Path;
+            master = Path('/run/nginx.pid').read_text().strip();
+            children = Path(f'/proc/{master}/task/{master}/children').read_text().split();
+            print(f'{master}:' + ','.join(sorted(children, key=int)))
+      register: lifecycle_nginx_generation_after_reload
+      changed_when: false
+      until: >-
+        lifecycle_nginx_generation_after_reload.stdout !=
+        lifecycle_nginx_generation_before_reload.stdout
+      retries: 10
+      delay: 1
+
+    - name: "Assert a valid change invoked exactly one real reload"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_reload_count_after_valid_change.content | b64decode | trim == "1"
+          - >-
+            lifecycle_nginx_generation_after_reload.stdout.split(':', 1)[0] ==
+            lifecycle_nginx_generation_before_reload.stdout.split(':', 1)[0]
+          - >-
+            lifecycle_nginx_generation_after_reload.stdout !=
+            lifecycle_nginx_generation_before_reload.stdout
+
+    - name: "Install invalid configuration and verify validation blocks reload"
+      block:
+        - name: "Install a test-only invalid Nginx configuration"
+          ansible.builtin.copy:
+            content: "this_directive_is_invalid on;\n"
+            dest: "/etc/nginx/sites-enabled/handler-invalid.conf"
+            owner: "root"
+            group: "root"
+            mode: "0644"
+          notify: "Validate Nginx configuration"
+
+        - name: "Flush handlers for the invalid configuration"
+          ansible.builtin.meta: flush_handlers
+      rescue:
+        - name: "Record the expected handler validation failure"
+          ansible.builtin.set_fact:
+            lifecycle_invalid_configuration_rejected: true
+
+    - name: "Read the reload count after failed validation"
+      ansible.builtin.slurp:
+        src: "/run/nginx-handler-reload-count"
+      register: lifecycle_reload_count_after_invalid_change
+
+    - name: "Assert failed validation did not invoke systemd reload"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_invalid_configuration_rejected | default(false)
+          - >-
+            lifecycle_reload_count_after_invalid_change.content ==
+            lifecycle_reload_count_after_valid_change.content
+  always:
+    - name: "Remove test-only invalid Nginx configuration"
+      ansible.builtin.file:
+        path: "/etc/nginx/sites-enabled/handler-invalid.conf"
+        state: "absent"
+
+    - name: "Remove test-only Nginx reload instrumentation"
+      ansible.builtin.file:
+        path: "{{ lifecycle_reload_test_path }}"
+        state: "absent"
+      loop:
+        - "/etc/systemd/system/nginx.service.d/handler-regression.conf"
+        - "/usr/local/libexec/nginx-handler-reload-wrapper"
+        - "/run/nginx-handler-reload-count"
+        - "/run/nginx-handler-reload-count.lock"
+      loop_control:
+        loop_var: lifecycle_reload_test_path
+
+    - name: "Reload systemd after removing the Nginx reload drop-in"
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: "Validate restored Nginx configuration after instrumentation cleanup"
+      ansible.builtin.command: "/usr/sbin/nginx -t"
+      changed_when: false
