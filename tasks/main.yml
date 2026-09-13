@@ -23,6 +23,7 @@
     nginx_loop_state: ""
     nginx_manifest_raw: {}
     nginx_validation_error_code: ""
+    nginx_proxy_ssl_ca_required: false
 
 - name: "Reject unknown Nginx states"
   ansible.builtin.assert:
@@ -38,6 +39,10 @@
 
 - name: "Validate the complete blueprint before host changes"
   ansible.builtin.include_tasks: validate.yml
+
+- name: "Validate the HTTPS upstream trust store before host changes"
+  ansible.builtin.include_tasks: proxy_ssl_preflight.yml
+  when: nginx_state in ['validate', 'install', 'site_present', 'site_enabled', 'location_present', 'location_absent', 'started']
 
 - name: "Capture pre-convergence Nginx ownership state"
   ansible.builtin.stat:

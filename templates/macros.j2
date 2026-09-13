@@ -13,7 +13,45 @@
 {% endfor %}
 {%- endmacro %}
 
-{% macro render_location(loc) %}
+{% macro render_access_directive(k, value) -%}
+{% if k == 'auth_basic' and value is string and value != 'off' %}
+{{ k }} {{ value | to_json }};
+{% else %}
+{{ k }} {{ render_value(value) }};
+{% endif %}
+{%- endmacro %}
+
+{% macro render_access_control(d, inherited={}) %}
+{# Preserve user mapping order because Nginx allow/deny rules are first-match.
+   A complete location allow+deny pair replaces the inherited rule pair in
+   location order. A partial override replaces inherited keys in place. #}
+{% if inherited | length == 0 %}
+{% for k, value in d.items() if k in ['allow', 'deny', 'auth_basic', 'auth_basic_user_file'] and value is not none %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% elif 'allow' in d and d.allow is not none and 'deny' in d and d.deny is not none %}
+{% for k, value in d.items() if k in ['allow', 'deny'] %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% for k, inherited_value in inherited.items() if k in ['auth_basic', 'auth_basic_user_file'] %}
+{% set value = d[k] if k in d and d[k] is not none else inherited_value %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% for k, value in d.items() if k in ['auth_basic', 'auth_basic_user_file'] and k not in inherited and value is not none %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% else %}
+{% for k, inherited_value in inherited.items() if k in ['allow', 'deny', 'auth_basic', 'auth_basic_user_file'] %}
+{% set value = d[k] if k in d and d[k] is not none else inherited_value %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% for k, value in d.items() if k in ['allow', 'deny', 'auth_basic', 'auth_basic_user_file'] and k not in inherited and value is not none %}
+{{ render_access_directive(k, value) }}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+{% macro render_location(loc, inherited={}) %}
 {% if loc.autoconfigure is defined and loc.autoconfigure == 'proxy' %}
 location {{ loc.path | default('/') }} {
     proxy_pass {{ loc.redirect_to }};
@@ -27,8 +65,12 @@ location {{ loc.path | default('/') }} {
 {% if loc.redirect_to is match('^https://') %}
     proxy_ssl_verify {{ loc.proxy_ssl_verify | default(nginx_proxy_ssl_verify) | ternary('on', 'off') }};
     proxy_ssl_server_name on;
+{% if loc.proxy_ssl_verify | default(nginx_proxy_ssl_verify) %}
+    proxy_ssl_trusted_certificate {{ nginx_proxy_ssl_trusted_certificate | default('/etc/pki/tls/certs/ca-bundle.crt') }};
 {% endif %}
-{% for k, v in loc.items() if k in ['deny', 'allow', 'auth_basic', 'auth_basic_user_file', 'proxy_set_header', 'proxy_redirect', 'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout', 'proxy_connect_timeout'] and v is not none %}
+{% endif %}
+{{ render_access_control(loc, inherited) }}
+{% for k, v in loc.items() if k in ['proxy_set_header', 'proxy_redirect', 'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout', 'proxy_connect_timeout'] and v is not none %}
     {{ k }} {{ render_value(v) }};
 {% endfor %}
 }
@@ -47,7 +89,7 @@ server {
 {{ render_directives(srv) | indent(2, True) }}
 {% if render_locations and srv.locations is defined and srv.locations %}
 {% for loc in srv.locations %}
-{{ render_location(loc) | indent(2, True) }}
+{{ render_location(loc, srv) | indent(2, True) }}
 {% endfor %}
 {%- endif -%}
 }

@@ -1,0 +1,26 @@
+---
+- name: "Reject a non-portable cron filename"
+  block:
+    - name: "Validate the non-portable cron filename"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            cron:
+              - name: "unsafe cron fixture"
+                job: "/usr/bin/true"
+                cron_file: "{{ validation_cron_filename }}"
+            sites: []
+    - name: "Record an unexpectedly accepted cron filename"
+      ansible.builtin.set_fact:
+        cron_filename_results: >-
+          {{ (cron_filename_results | default([])) +
+          [{'name': validation_cron_filename, 'rejected': false}] }}
+  rescue:
+    - name: "Record the expected cron filename rejection"
+      ansible.builtin.set_fact:
+        cron_filename_results: >-
+          {{ (cron_filename_results | default([])) +
+          [{'name': validation_cron_filename, 'rejected': true}] }}

@@ -29,12 +29,8 @@
         iac_blueprint: "{{ lifecycle_blueprint }}"
       when: "not lifecycle_transition_marker.stat.exists"
 
-    - name: "Disable the lifecycle site and trigger safe reload"
-      ansible.builtin.include_role:
-        name: "{{ playbook_dir | dirname | dirname }}"
-      vars:
-        state: "site_disabled"
-        iac_blueprint: "{{ lifecycle_blueprint }}"
+    - name: "Verify validation and reload handler chaining"
+      ansible.builtin.include_tasks: "tasks/handler_reload_regression.yml"
       when: "not lifecycle_transition_marker.stat.exists"
 
     - name: "Check the manual site is disabled"

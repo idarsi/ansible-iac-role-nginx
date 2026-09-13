@@ -5,10 +5,21 @@
   vars:
     check_mode_blueprint:
       nginx:
+        files:
+          - path: "/etc/nginx/check-mode-ca.crt"
+            content: "{{ lookup('file', playbook_dir ~ '/../functional/files/test-ca.crt') }}\n"
+            mode: "0644"
+          - path: "/var/tmp/nginx-check-mode-secret.conf"
+            content: "TEST_ONLY_SECRET_MUST_NOT_APPEAR_IN_DIFF"
+            mode: "0600"
         sites:
           - name: "check.example.org"
             autoconfigure: "website"
             ssl_certificate_type: "selfsigned"
+          - name: "check-ca.example.org"
+            autoconfigure: "proxy"
+            ssl_certificate_type: "none"
+            proxy_pass: "https://127.0.0.1:9443"
     check_mode_paths:
       - "/etc/nginx/nginx.conf"
       - "/etc/nginx/sites-available/check.example.org"
@@ -16,11 +27,22 @@
       - "/etc/pki/tls/private/check.example.org.key"
       - "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
       - "/var/lib/ansible-iac-role-nginx/manifest.yml"
+      - "/etc/nginx/check-mode-ca.crt"
+      - "/etc/nginx/sites-available/check-ca.example.org"
+      - "/etc/nginx/sites-enabled/check-ca.example.org"
   tasks:
     - name: "Capture installed package facts before check mode"
       ansible.builtin.package_facts:
         manager: "auto"
       register: check_mode_packages_before
+
+    - name: "Provide the existing check-mode proxy source fixture"
+      ansible.builtin.copy:
+        dest: "/etc/nginx/sites-available/check-ca.example.org"
+        content: "# Existing test-only source; check mode must not replace it.\n"
+        owner: "root"
+        group: "root"
+        mode: "0644"
 
     - name: "Capture managed files before check mode"
       ansible.builtin.stat:
@@ -55,6 +77,7 @@
           diff: true
       vars:
         state: "install"
+        nginx_proxy_ssl_trusted_certificate: "/etc/nginx/check-mode-ca.crt"
         iac_blueprint: "{{ check_mode_blueprint }}"
 
     - name: "Capture managed files after check mode"

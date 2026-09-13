@@ -5,6 +5,7 @@
     nginx_fs_files_input: "{{ iac_fs_files | default([]) }}"
     nginx_fs_directories_normalized: []
     nginx_fs_files_normalized: []
+  no_log: true
 
 - name: "Apply role filesystem permission defaults"
   ansible.builtin.set_fact:
@@ -23,9 +24,15 @@
   loop: "{{ nginx_fs_files_input }}"
   loop_control:
     loop_var: iac_fs_file_record
+  no_log: true
 
 - name: "Include shared filesystem present tasks"
-  ansible.builtin.include_tasks: shared/fs_present.yml
+  ansible.builtin.include_tasks:
+    file: shared/fs_present.yml
+    apply:
+      no_log: true
+      diff: false
   vars:
     iac_fs_directories: "{{ nginx_fs_directories_normalized }}"
     iac_fs_files: "{{ nginx_fs_files_normalized }}"
+  no_log: true

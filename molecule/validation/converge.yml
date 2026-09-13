@@ -397,6 +397,101 @@
           - managed_path_validation_results | map(attribute='failed') | select('equalto', true) | list | length == 3
           - managed_path_validation_results | map(attribute='msg') | select('search', 'invalid path') | list | length == 3
 
+    - name: "Reject every representative path form that canonicalizes to root"
+      ansible.builtin.include_tasks: "tasks/reject_root_canonical_path.yml"
+      loop:
+        - "/./."
+        - "/././."
+        - "/./././."
+      loop_control:
+        loop_var: validation_root_canonical_path
+
+    - name: "Verify root-canonicalizing paths are rejected before mutation"
+      ansible.builtin.assert:
+        that:
+          - root_canonical_path_results | length == 3
+          - root_canonical_path_results | map(attribute='rejected') | select('equalto', true) | list | length == 3
+          - >-
+            root_canonical_path_results | map(attribute='code') |
+            reject('equalto', 'CANONICAL_PATH_PROTECTED_ROOT') | list | length == 0
+          - >-
+            root_canonical_path_results | map(attribute='message') |
+            reject('search', 'A managed filesystem path resolves to a protected system root[.]') |
+            list | length == 0
+
+    - name: "Accept a valid cron record"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            cron:
+              - name: "safe cron fixture"
+                job: "/usr/bin/true"
+                cron_file: "nginx-maintenance"
+            sites: []
+
+    - name: "Reject non-portable cron filenames"
+      ansible.builtin.include_tasks: "tasks/reject_cron_filename.yml"
+      loop:
+        - "."
+        - ".."
+        - "nginx.maintenance"
+      loop_control:
+        loop_var: validation_cron_filename
+
+    - name: "Verify non-portable cron filename rejection"
+      ansible.builtin.assert:
+        that:
+          - cron_filename_results | length == 3
+          - cron_filename_results | map(attribute='rejected') | select('equalto', true) | list | length == 3
+
+    - name: "Verify secret normalization and handler chaining safeguards remain explicit"
+      ansible.builtin.assert:
+        that:
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/fs_present.yml') is search(
+            '(?s)name: "Apply role file permission defaults".*?no_log: true.*?apply:\s+no_log: true\s+diff: false.*?no_log: true')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/handlers/main.yml') is search(
+            '(?s)name: "Validate Nginx configuration".*?changed_when: true.*?notify: "Reload Nginx"')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/handlers/main.yml') is search(
+            '(?s)name: "Reload Nginx".*?systemd_service:.*?name:.*?iac_service_name.*?get\(.*?iac_service_name.*?\.service')
+          - >-
+            lookup('file', (playbook_dir | dirname) ~ '/lifecycle/tasks/handler_reload_regression.yml') is search(
+            '(?s)os\.replace\(temporary, counter\).*?subprocess\.run\(\["/usr/sbin/nginx", "-s", "reload"\]')
+
+    - name: "Verify reload service-fact lookup supports public service-name overrides"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (service_fact_fixture.services.get(
+            service_fact_fixture.name,
+            service_fact_fixture.services.get(service_fact_fixture.name + '.service', {})).state |
+            default('stopped')) == 'running'
+      loop:
+        - name: "nginx"
+          services:
+            nginx:
+              state: "running"
+        - name: "nginx"
+          services:
+            nginx.service:
+              state: "running"
+        - name: "custom-nginx"
+          services:
+            custom-nginx.service:
+              state: "running"
+        - name: "custom-nginx.service"
+          services:
+            custom-nginx.service:
+              state: "running"
+      loop_control:
+        loop_var: service_fact_fixture
+        label: "{{ service_fact_fixture.name }}:{{ service_fact_fixture.services.keys() | list | first }}"
+
     - name: "Reject traversal-like site names before mutation"
       block:
         - name: "Validate the unsafe site name"
