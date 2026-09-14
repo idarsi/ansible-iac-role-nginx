@@ -161,6 +161,7 @@
       - "{{ nginx_canonical_guard_path }}"
   register: nginx_canonical_guard_results
   changed_when: false
+  check_mode: false
   loop: "{{ nginx_canonical_guard_paths }}"
   loop_control:
     loop_var: nginx_canonical_guard_path
@@ -180,10 +181,11 @@
     that:
       - nginx_canonical_guard_result.rc == 0
       - nginx_canonical_guard_result.stdout != '/'
+      - nginx_canonical_guard_result.stdout | length > 0
       - >-
         nginx_canonical_guard_result.stdout is not match(
         '^/(?:etc$|var$|var/(?:lib|log|cache)(?:/|$)|usr$|usr/local(?:/|$)|home$|root$|etc/(?:passwd|shadow|group|gshadow|sudoers|hosts|fstab|ssh|systemd)(?:/|$)|root/\\.ssh(?:/|$))')
-    fail_msg: "A managed filesystem path resolves to a protected system root."
+    fail_msg: "A managed filesystem path resolves to a protected system root. Canonical path validation could not be verified."
   loop: "{{ nginx_canonical_guard_results.results }}"
   loop_control:
     loop_var: nginx_canonical_guard_result
@@ -475,13 +477,49 @@
          difference([
          'deny', 'allow', 'auth_basic', 'auth_basic_user_file', 'proxy_set_header', 'proxy_redirect',
          'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout',
-         'proxy_connect_timeout', 'proxy_ssl_verify', 'proxy_ssl_server_name']) |
+         'proxy_connect_timeout', 'proxy_ssl_verify', 'proxy_ssl_server_name', 'auth_request', 'internal']) |
          list | length) == 0
     fail_msg: "Locations need a safe path; proxy locations need redirect_to and boolean proxy_ssl_verify. The proxy preset reserves location /."
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
     loop_var: nginx_location_record
+    label: "{{ nginx_location_record.path | default('redacted') }}"
+
+- name: "Set the auth_request validation error code before failure"
+  ansible.builtin.set_fact:
+    nginx_validation_error_code: "LOCATION_ACCESS_CONTROL_INVALID"
+  loop: "{{ nginx_blueprint_locations }}"
+  loop_control:
+    loop_var: nginx_auth_request_code_record
+    label: "{{ nginx_auth_request_code_record.path | default('redacted') }}"
+  when: >-
+    nginx_auth_request_code_record.auth_request is defined and
+    ((nginx_auth_request_code_record.auth_request | type_debug) != 'str' or
+    not (nginx_auth_request_code_record.auth_request is match(
+    '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$')))
   no_log: true
+
+- name: "Validate location auth_request URIs"
+  ansible.builtin.assert:
+    that:
+      - >-
+        nginx_auth_request_record.auth_request is not defined or
+        ((nginx_auth_request_record.auth_request | type_debug) == 'str' and
+        nginx_auth_request_record.auth_request is match(
+         '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$'))
+      - >-
+        nginx_auth_request_record.internal is not defined or
+        ((nginx_auth_request_record.internal | type_debug) == 'str' and
+        nginx_auth_request_record.internal == '') or
+        (nginx_auth_request_record.internal is boolean and
+        nginx_auth_request_record.internal)
+    fail_msg: >-
+      auth_request must be an absolute local URI using the supported path
+      characters; schemes, whitespace, and Nginx syntax are not allowed.
+  loop: "{{ nginx_blueprint_locations }}"
+  loop_control:
+    loop_var: nginx_auth_request_record
+    label: "{{ nginx_auth_request_record.path | default('redacted') }}"
 
 - name: "Validate location auth_basic_user_file paths"
   ansible.builtin.assert:
@@ -525,7 +563,9 @@
     that:
       - nginx_sensitive_location_record.auth_basic is not defined or (nginx_sensitive_location_record.auth_basic | type_debug) == 'str'
       - nginx_sensitive_location_record.auth_basic_user_file is not defined or (nginx_sensitive_location_record.auth_basic_user_file | type_debug) == 'str'
-    fail_msg: "Sensitive location directives must use string values."
+    fail_msg: >-
+      Locations need safe values; auth_request must be an absolute local URI
+      without whitespace, a scheme, or Nginx syntax.
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
     loop_var: nginx_sensitive_location_record

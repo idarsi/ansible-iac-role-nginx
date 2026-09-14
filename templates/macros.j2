@@ -51,6 +51,19 @@
 {% endif %}
 {% endmacro %}
 
+{% macro render_location_security(d) %}
+{% if d.auth_request is defined and d.auth_request is not none %}
+ auth_request {{ d.auth_request }};
+{% endif %}
+{% if d.internal is defined and d.internal is not none %}
+{% if d.internal is boolean and d.internal %}
+ internal;
+{% elif d.internal == '' %}
+ internal;
+{% endif %}
+{% endif %}
+{% endmacro %}
+
 {% macro render_location(loc, inherited={}) %}
 {% if loc.autoconfigure is defined and loc.autoconfigure == 'proxy' %}
 location {{ loc.path | default('/') }} {
@@ -70,6 +83,7 @@ location {{ loc.path | default('/') }} {
 {% endif %}
 {% endif %}
 {{ render_access_control(loc, inherited) }}
+{{ render_location_security(loc) }}
 {% for k, v in loc.items() if k in ['proxy_set_header', 'proxy_redirect', 'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout', 'proxy_connect_timeout'] and v is not none %}
     {{ k }} {{ render_value(v) }};
 {% endfor %}
@@ -77,7 +91,8 @@ location {{ loc.path | default('/') }} {
 {% else %}
 {# vapaamuotoinen location: kaikki avaimet paitsi path #}
 location {{ loc.path | default('/') }} {
-{% for k, v in loc.items() if k not in ['path'] and v is not none %}
+{{ render_location_security(loc) }}
+{% for k, v in loc.items() if k not in ['path', 'auth_request', 'internal'] and v is not none %}
     {{ k }} {{ render_value(v) }};
 {% endfor %}
 }

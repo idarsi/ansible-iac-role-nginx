@@ -56,6 +56,7 @@
 - name: "Normalize configured sites"
   ansible.builtin.set_fact:
     nginx_sites: "{{ iac_blueprint.nginx.sites | default([]) }}"
+  no_log: true
 
 - name: "Ensure site state is converged"
   ansible.builtin.include_tasks: loop_sites.yml
