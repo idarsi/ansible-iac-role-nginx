@@ -37,6 +37,7 @@
                 autoconfigure: "website"
                 ssl_certificate_type: "selfsigned"
                 servers: []
+
               - name: "proxy.example.org"
                 autoconfigure: "proxy"
                 ssl_certificate_type: "selfsigned"
@@ -45,7 +46,13 @@
                   - path: "/backend-health"
                     autoconfigure: "proxy"
                     redirect_to: "http://127.0.0.1:3000/health"
+                  - path: "/auth-protected"
+                    auth_request: "/auth"
+                    internal: ""
                 servers: []
+
+    - name: "Run the site normalization logging regression"
+      ansible.builtin.include_tasks: "tasks/no_log_site_normalization.yml"
 
     - name: "Render a custom repository name without contacting an external repository"
       ansible.builtin.template:

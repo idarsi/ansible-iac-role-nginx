@@ -31,6 +31,51 @@
       - "/etc/nginx/sites-available/check-ca.example.org"
       - "/etc/nginx/sites-enabled/check-ca.example.org"
   tasks:
+    - name: "Reject an unverifiable canonical path in check mode"
+      ansible.builtin.set_fact:
+        check_mode_canonical_path_accepted: false
+        check_mode_canonical_path_rejected: false
+        check_mode_canonical_path_error_code: ""
+        check_mode_canonical_path_error_message: ""
+
+    - name: "Validate canonical path guard in check mode"
+      block:
+        - name: "Validate a root-canonicalizing path without mutation"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+            apply:
+              check_mode: true
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                directories:
+                  - path: "/./."
+                sites: []
+        - name: "Record an unexpectedly accepted canonical path"
+          ansible.builtin.set_fact:
+            check_mode_canonical_path_accepted: true
+      rescue:
+        - name: "Record the expected check-mode canonical path failure"
+          ansible.builtin.set_fact:
+            check_mode_canonical_path_rejected: true
+            check_mode_canonical_path_error_code: "{{ nginx_validation_error_code | default('') }}"
+            check_mode_canonical_path_error_message: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify check mode rejects the canonical path"
+      ansible.builtin.assert:
+        that:
+          - "check_mode_canonical_path_accepted is false"
+          - "check_mode_canonical_path_rejected is true"
+          - "check_mode_canonical_path_error_code == 'CANONICAL_PATH_PROTECTED_ROOT'"
+          - >-
+            'A managed filesystem path resolves to a protected system root.' in
+            check_mode_canonical_path_error_message
+          - >-
+            'Canonical path validation could not be verified.' in
+            check_mode_canonical_path_error_message
+        fail_msg: "Check mode must reject canonical paths and report the canonical path guard error."
+
     - name: "Capture installed package facts before check mode"
       ansible.builtin.package_facts:
         manager: "auto"
@@ -128,14 +173,14 @@
           - >-
            check_mode_before.results | map(attribute="stat.gr_name", default="") | list ==
             check_mode_after.results | map(attribute="stat.gr_name", default="") | list
-          - check_mode_repo_before.stat.exists == check_mode_repo_after.stat.exists
-          - not check_mode_repo_after.stat.exists
+          - "check_mode_repo_before.stat.exists == check_mode_repo_after.stat.exists"
+          - "not check_mode_repo_after.stat.exists"
           - >-
             (check_mode_repo_before.stat.exists | ternary(
               check_mode_repo_content_before.content | default(""), "")) ==
             (check_mode_repo_after.stat.exists | ternary(
               check_mode_repo_content_after.content | default(""), ""))
-          - ("nginx" in check_mode_packages_before.ansible_facts.packages) == ("nginx" in check_mode_packages_after.ansible_facts.packages)
+          - "('nginx' in check_mode_packages_before.ansible_facts.packages) == ('nginx' in check_mode_packages_after.ansible_facts.packages)"
           - >-
             ("dnf-plugins-core" in check_mode_packages_before.ansible_facts.packages) ==
             ("dnf-plugins-core" in check_mode_packages_after.ansible_facts.packages)

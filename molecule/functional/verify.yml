@@ -34,6 +34,19 @@
           - >-
             'auth_basic "Functional restricted area";' in functional_nginx_config.stdout
           - "functional_nginx_config.stdout is search('auth_basic off;')"
+          - "functional_nginx_config.stdout is search('location /auth-protected \\{')"
+          - >-
+            functional_nginx_config.stdout | regex_findall(
+            'location /auth-protected \\{[^}]*auth_request /auth;[^}]*internal;[^}]*\\}') | length >= 2
+          - >-
+            functional_nginx_config.stdout is search(
+            'server_name http-proxy\\.functional\\.example\\.org;')
+          - >-
+            functional_nginx_config.stdout is search(
+            'server_name http-proxy\\.functional\\.example\\.org;[\\s\\S]*?location /auth-protected \\{[^}]*auth_request /auth;[^}]*internal;[^}]*\\}')
+          - >-
+            functional_nginx_config.stdout is search(
+            'server_name proxy\\.functional\\.example\\.org;[\\s\\S]*?location /auth-protected \\{[^}]*auth_request /auth;[^}]*internal;[^}]*\\}')
           - "functional_nginx_config.stdout is search('server_name managed-ca\\.functional\\.example\\.org;')"
           - >-
             functional_nginx_config.stdout is search(

@@ -24,9 +24,11 @@ automatically covered here.
    and bind source/target traversal and unsafe paths in both validation and
    absent states, with exact failure messages and preservation of pre-existing
    state. It also renders a custom DNF repository section without contacting an
-  external repository. Proxy tests verify access-rule ordering, quoted
-  authentication realms, conditional CA-file preflight, and same-run managed
-  CA files. Check-mode fixtures include the public test CA and execute the production present and
+   external repository. Proxy tests verify access-rule ordering, quoted
+   authentication realms, conditional CA-file preflight, and same-run managed
+   CA files. Functional coverage validates separate HTTP and HTTPS proxy
+   locations containing `auth_request` and `internal`, and runs `nginx -t` on
+   the generated configuration. Check-mode fixtures include the public test CA and execute the production present and
   absent package dispatch paths using the hardcoded test-only `nginx-core`
   override. Both package operations run in check mode without installing or
   removing a package. The baseline
@@ -54,7 +56,9 @@ automatically covered here.
   the managed site's SHA-256 checksum before and after convergence. These are
   observable idempotence checks; `verify.yml` does not assert a systematic
   Ansible `changed=0` result for the repeated role invocations.
-* `check_mode` compares package presence, service state, and managed file
+ * `check_mode` first rejects a root-canonicalizing path even in check mode and
+   asserts the `CANONICAL_PATH_PROTECTED_ROOT` error code and message. It then
+   compares package presence, service state, and managed file
   existence, checksums, and modes before and after representative check+diff
   convergence. It separately compares the repository path and content; the
   repository is expected to remain absent because check mode does not preview

@@ -26,3 +26,4 @@
   loop: "{{ nginx_sites }}"
   loop_control:
     loop_var: nginx_site
+    label: "{{ nginx_site.name | default('redacted') }}"

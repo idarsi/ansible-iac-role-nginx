@@ -87,6 +87,8 @@
   loop: "{{ nginx_site.servers | default([]) }}"
   loop_control:
     loop_var: nginx_server
+    label: "{{ nginx_server.server_name | default(nginx_server.listen | default('redacted')) }}"
+  no_log: true
   when: (nginx_site.servers | default([]) | length) > 0
 
 - name: "Record the site in the role ownership manifest"

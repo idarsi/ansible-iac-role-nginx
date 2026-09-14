@@ -1,24 +1,24 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 85%**
+> **RC Readiness: 86%**
 >
-> **Assessment basis:** commit `ef85eab` (`Fix CI handler validation after
-> uninstall`) and the current working tree. Validation, functional, and
-> check-mode Molecule scenarios PASS; lifecycle Molecule is now PASS in all
-> phases, including the valid reload counter transition `0→1` and the invalid
-> counter remaining `1`. Static syntax, lint, and YAML checks also PASS in the
-> shared environment. The earlier lifecycle counter failure was corrected by
-> the `/run` fix and is historical, not a current gap.
+> **Assessment basis:** the current working tree after the implementation
+> changes. Validation and check-mode Molecule scenarios PASS; functional
+> Molecule PASS was recorded after this implementation version, and lifecycle
+> Molecule PASS is prior evidence for unchanged code. Static syntax, production
+> lint, and YAML checks PASS. The `auth_request`/`internal` locations, narrow
+> `no_log` coverage, and canonical check-mode safeguards are reviewer APPROVED.
 >
 > **Scorecard:** Scope and public contract `10/12`; functional completeness
-> `17/20`; validation and safety `17.5/20`; convergence and recovery `10/13`;
-> automated testing and CI `22/25`; documentation and release hygiene `9/10`.
-> Total `85.5%`, rounded down to **85%**.
+> `17/20`; validation and safety `18.5/20`; convergence and recovery `10/13`;
+> automated testing and CI `21.5/25`; documentation and release hygiene `9/10`.
+> Total `86%`, rounded down to **86%**.
 >
-> **Main gaps:** reproducible RHEL 9/10 evidence (or a narrowed support
-> contract), current platform-matrix evidence, guardrail coverage/evidence, and
-> role metadata. SELinux-enabled behavior remains documented but untested. The
-> role is not a Release Candidate; production review is therefore not
-> applicable.
+> **Missing evidence and RC blockers:** a current Rocky Linux 9/10
+> platform-matrix result, green CI evidence at the assessed ref, and a current
+> guardrail scenario result are not established here. RHEL 9/10 support has no
+> reproducible evidence, role metadata is absent, and SELinux-enabled behavior
+> remains untested. These gaps retain the mandatory Beta cap; the role is not a
+> Release Candidate and production review is not applicable.
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
@@ -130,9 +130,15 @@ fields, and other Nginx directives. An SSL listener requires both
 the configured public/private certificate directories. Each server may have a
 `locations` list. A location requires a non-empty path beginning with `/` and
 may use `autoconfigure: "proxy"` with a required HTTP(S) `redirect_to`, or may
-contain free-form Nginx directive fields. Location paths must be unique within
-their collection. The proxy preset owns `/`, so `/` cannot be declared as an
-additional proxy-site location.
+ contain free-form Nginx directive fields. Location paths must be unique within
+ their collection. The proxy preset owns `/`, so `/` cannot be declared as an
+ additional proxy-site location. The supported location security fields are:
+
+ * `auth_request`: a local absolute URI beginning with `/`. Only
+   `A-Za-z0-9._~!$&()*+,=:@%/?-` are allowed; schemes, whitespace, semicolons,
+   braces, comments, and line breaks are rejected.
+ * `internal`: boolean `true` or the empty string `""`, both rendered as the
+   Nginx directive `internal;`. A location cannot bypass schema validation.
 
 ```yaml
 iac_blueprint:
