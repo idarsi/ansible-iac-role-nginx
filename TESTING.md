@@ -56,9 +56,9 @@ automatically covered here.
   the managed site's SHA-256 checksum before and after convergence. These are
   observable idempotence checks; `verify.yml` does not assert a systematic
   Ansible `changed=0` result for the repeated role invocations.
- * `check_mode` first rejects a root-canonicalizing path even in check mode and
-   asserts the `CANONICAL_PATH_PROTECTED_ROOT` error code and message. It then
-   compares package presence, service state, and managed file
+* `check_mode` first rejects a root-canonicalizing path in absent state even in check mode and
+  asserts the `CANONICAL_PATH_PROTECTED_ROOT` error code and message. It then
+  compares package presence, service state, and managed file
   existence, checksums, and modes before and after representative check+diff
   convergence. It separately compares the repository path and content; the
   repository is expected to remain absent because check mode does not preview

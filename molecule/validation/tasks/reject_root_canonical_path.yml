@@ -5,7 +5,7 @@
       ansible.builtin.include_role:
         name: "{{ playbook_dir | dirname | dirname }}"
       vars:
-        state: "validate"
+        state: "absent"
         iac_blueprint:
           nginx:
             directories:

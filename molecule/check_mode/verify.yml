@@ -46,7 +46,7 @@
             apply:
               check_mode: true
           vars:
-            state: "validate"
+            state: "absent"
             iac_blueprint:
               nginx:
                 directories:

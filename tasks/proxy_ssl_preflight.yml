@@ -8,7 +8,7 @@
 - name: "Determine whether this run manages the required upstream CA file"
   ansible.builtin.set_fact:
     nginx_proxy_ssl_ca_managed_this_run: >-
-      {{ nginx_state in ['validate', 'install'] and
+      {{ nginx_state == 'install' and
       (iac_blueprint.nginx.files | default([]) |
       selectattr('path', 'equalto', nginx_proxy_ssl_trusted_certificate) |
       list | length) > 0 }}

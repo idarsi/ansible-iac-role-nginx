@@ -1,24 +1,26 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 86%**
+> **RC Readiness: 83%**
 >
 > **Assessment basis:** the current working tree after the implementation
-> changes. Validation and check-mode Molecule scenarios PASS; functional
-> Molecule PASS was recorded after this implementation version, and lifecycle
-> Molecule PASS is prior evidence for unchanged code. Static syntax, production
-> lint, and YAML checks PASS. The `auth_request`/`internal` locations, narrow
-> `no_log` coverage, and canonical check-mode safeguards are reviewer APPROVED.
+> changes. The validation Molecule scenario passed after the missing-CA test
+> was changed to install a CA. The production ansible-lint profile passed with
+> 0 failures and 0 warnings; syntax and diff checks passed. The
+> `tasks/shared` submodule is initialized at pinned gitlink `d70d58e`. The role's
+> `validate` path itself skips host-runtime probes. RHEL 9/10 and SELinux
+> automated coverage are absent; current Rocky matrix, green CI at this ref,
+> and other relevant scenario results are not established.
 >
 > **Scorecard:** Scope and public contract `10/12`; functional completeness
 > `17/20`; validation and safety `18.5/20`; convergence and recovery `10/13`;
-> automated testing and CI `21.5/25`; documentation and release hygiene `9/10`.
-> Total `86%`, rounded down to **86%**.
+> automated testing and CI `19/25`; documentation and release hygiene `9/10`.
+> Total `83.5/100`, rounded down to **83%**.
 >
 > **Missing evidence and RC blockers:** a current Rocky Linux 9/10
-> platform-matrix result, green CI evidence at the assessed ref, and a current
-> guardrail scenario result are not established here. RHEL 9/10 support has no
-> reproducible evidence, role metadata is absent, and SELinux-enabled behavior
-> remains untested. These gaps retain the mandatory Beta cap; the role is not a
-> Release Candidate and production review is not applicable.
+> platform-matrix result, green CI evidence at the assessed ref, and other
+> relevant scenario results are not established here. RHEL 9/10 support has no
+> automated coverage, role metadata is absent, and SELinux-enabled behavior
+> remains without automated coverage. These gaps retain the mandatory Beta cap;
+> the role is not a Release Candidate and production review is not applicable.
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
@@ -192,10 +194,12 @@ accounts; the role does not invent accounts or widen permissions. Optional
 Traversal components, empty components, broad parent paths, and protected
 paths such as `/etc/passwd` are rejected before any mutation. Safe paths such
 as `/srv/data` and `/var/www` remain valid.
-The role also resolves managed paths with `realpath -m` before mutation to
-detect parent-symlink resolution into protected roots. This is a preflight
-guard, not an atomic protection against a privileged actor changing a parent
-symlink between validation and the filesystem operation.
+For states that inspect or change host state, the role resolves managed paths
+with `realpath -m` before state work to detect parent-symlink resolution into
+protected roots. The `validate` state intentionally performs no host-runtime
+probes. This is a preflight guard, not an atomic protection against a
+privileged actor changing a parent symlink between validation and the
+filesystem operation.
 
 ```yaml
 iac_blueprint:

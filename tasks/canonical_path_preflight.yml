@@ -1,0 +1,57 @@
+---
+###############################################################################
+#
+# canonical_path_preflight.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# CHECKING CANONICAL FILESYSTEM PATHS
+###############################################################################
+
+- name: "Build canonical path guard list"
+  ansible.builtin.set_fact:
+    nginx_canonical_guard_paths: >-
+      {{ (iac_blueprint.nginx.directories | default([]) | map(attribute='path') | list) +
+      (iac_blueprint.nginx.files | default([]) | map(attribute='path') | list) +
+      (iac_blueprint.nginx.binds | default([]) | map(attribute='source') | list) +
+      (iac_blueprint.nginx.binds | default([]) | map(attribute='target') | list) }}
+
+- name: "Resolve filesystem paths before any host mutation"
+  ansible.builtin.command:
+    argv:
+      - "realpath"
+      - "-m"
+      - "{{ nginx_canonical_guard_path }}"
+  register: nginx_canonical_guard_results
+  changed_when: false
+  check_mode: false
+  loop: "{{ nginx_canonical_guard_paths }}"
+  loop_control:
+    loop_var: nginx_canonical_guard_path
+  no_log: true
+
+- name: "Classify managed paths that canonicalize to root"
+  ansible.builtin.set_fact:
+    nginx_validation_error_code: "CANONICAL_PATH_PROTECTED_ROOT"
+  loop: "{{ nginx_canonical_guard_results.results }}"
+  loop_control:
+    loop_var: nginx_canonical_guard_result
+  when: nginx_canonical_guard_result.stdout == '/'
+  no_log: true
+
+- name: "Reject canonical paths reaching protected roots"
+  ansible.builtin.assert:
+    that:
+      - nginx_canonical_guard_result.rc == 0
+      - nginx_canonical_guard_result.stdout != '/'
+      - nginx_canonical_guard_result.stdout | length > 0
+      - >-
+        nginx_canonical_guard_result.stdout is not match(
+        '^/(?:etc$|var$|var/(?:lib|log|cache)(?:/|$)|usr$|usr/local(?:/|$)|home$|root$|etc/(?:passwd|shadow|group|gshadow|sudoers|hosts|fstab|ssh|systemd)(?:/|$)|root/\\.ssh(?:/|$))')
+    fail_msg: "A managed filesystem path resolves to a protected system root. Canonical path validation could not be verified."
+  loop: "{{ nginx_canonical_guard_results.results }}"
+  loop_control:
+    loop_var: nginx_canonical_guard_result
