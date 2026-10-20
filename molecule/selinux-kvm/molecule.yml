@@ -1,0 +1,36 @@
+---
+scenario:
+  name: "selinux-kvm"
+  test_sequence:
+    - "syntax"
+    - "create"
+    - "converge"
+    - "idempotence"
+    - "verify"
+    - "destroy"
+
+driver:
+  name: "default"
+  options:
+    managed: true
+
+ansible:
+  playbooks:
+    create: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/create.yml"
+    destroy: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/destroy.yml"
+
+platforms:
+  - name: "rocky10"
+    install_source: "${IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10}"
+    kickstart: "${IDARSI_TEST_ENVIRONMENT}/examples/molecule-kvm/rocky9-10.ks.tmpl"
+    memory_mb: 4096
+    vcpus: 2
+    disk_size_gb: 30
+    install_timeout: 3600
+    ssh_user: "molecule"
+
+provisioner:
+  name: "ansible"
+
+verifier:
+  name: "ansible"
