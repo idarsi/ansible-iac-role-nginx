@@ -1,29 +1,5 @@
 > **Maturity State: Beta**<br>
 > **RC Readiness: 86%**
->
-> **Assessment basis:** the current working tree after the implementation
-> changes, including shared task fix `7a699f2`. Validation and check-mode
-> Molecule scenarios PASS; functional Molecule PASS was recorded after this
-> implementation version, and lifecycle Molecule PASS is prior evidence for
-> unchanged code. The KVM SELinux scenario PASS covers syntax, create, converge,
-> idempotence, verify, and destroy, with SELinux enforcing, the expected
-> `httpd_sys_content_t` label, and successful HTTP access. Static syntax,
-> production lint, and YAML checks PASS. The `auth_request`/`internal` locations,
-> narrow
-> `no_log` coverage, and canonical check-mode safeguards are reviewer APPROVED.
->
-> **Scorecard:** Scope and public contract `10/12`; functional completeness
-> `17/20`; validation and safety `18.5/20`; convergence and recovery `10/13`;
-> automated testing and CI `21.5/25`; documentation and release hygiene `9/10`.
-> Total `86%`, rounded down to **86%**.
->
-> **Missing evidence and RC blockers:** a current Rocky Linux 9/10
-> platform-matrix result, green CI evidence at the assessed ref, and a current
-> guardrail scenario result are not established here. RHEL 9/10 support has no
-> reproducible evidence, role metadata is absent, and SELinux evidence currently
-> covers the KVM scenario rather than the full platform matrix. These gaps retain
-> the mandatory Beta cap; the role is not a
-> Release Candidate and production review is not applicable.
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
