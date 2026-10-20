@@ -1,0 +1,41 @@
+---
+- name: "Verify SELinux labels and Nginx content access"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Confirm SELinux remains enforcing"
+      ansible.builtin.assert:
+        that:
+          - "ansible_selinux.status == 'enabled'"
+          - "ansible_selinux.mode == 'enforcing'"
+
+    - name: "Read the effective label on role-managed website content"
+      ansible.builtin.command:
+        argv:
+          - "stat"
+          - "-c"
+          - "%C"
+          - "/var/www/selinux.example.org/html/selinux-check.txt"
+      changed_when: false
+      register: selinux_content_context
+
+    - name: "Assert Nginx content has the web-readable SELinux type"
+      ansible.builtin.assert:
+        that:
+          - "selinux_content_context.stdout is search(':httpd_sys_content_t:')"
+        fail_msg: "Role-managed website content does not have httpd_sys_content_t."
+
+    - name: "Request the role-managed content through Nginx"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/selinux-check.txt"
+        headers:
+          Host: "selinux.example.org"
+        return_content: true
+        status_code: 200
+      register: selinux_http_response
+
+    - name: "Assert Nginx can serve the labeled content"
+      ansible.builtin.assert:
+        that:
+          - "selinux_http_response.content == 'nginx-selinux-content\n'"
