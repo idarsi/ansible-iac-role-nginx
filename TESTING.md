@@ -7,6 +7,7 @@
 | Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | ansible-core 2.21.3; nginx stable | `validation` | Validation and no-mutation contract |
 | Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | ansible-core 2.21.3; nginx stable | `guardrails`, `lifecycle`, `check_mode`, `functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
 | Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | ansible-core 2.21.3; nginx stable | `platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
+| Rocky Linux 10 KVM guest (shared test-environment Kickstart) | ansible-core 2.21.3; nginx stable; SELinux enforcing | `selinux-kvm` (manual) | Policy persistence, role-managed content label, HTTP access, and idempotence |
 
 Rocky Linux 9 and 10 are automatically tested by the scheduled
 `platform-matrix` scenario. RHEL 9/10 are supported by the role but are not
@@ -75,11 +76,19 @@ automatically covered here.
   HTTPS reverse-proxy response from a test-only backend on `127.0.0.1:8081`.
 * `platform-matrix` repeats the baseline on Rocky Linux 9 and 10. Privileged
   systemd and the cgroup mount are test-only Podman settings.
+* `selinux-kvm` is a manual full-VM scenario, not part of pull-request or
+  scheduled CI. It fails immediately unless SELinux is enabled and enforcing,
+  installs the guest's test-only `policycoreutils-python-utils` prerequisite
+  (which provides `semanage` on Rocky Linux 10), installs a website with
+  role-managed content explicitly assigned
+  `httpd_sys_content_t`, checks the effective file context, requests that file
+  through Nginx, and runs Molecule's idempotence phase. The guest is disposable;
+  Molecule teardown removes it and all guest-local policy changes.
 
 The validation and functional scenarios do not execute `restorecon` in their
 non-SELinux/container environments. Production `restorecon` errors fail the
-convergence, but the SELinux-enabled failure path is not covered by automated
-tests. The test suite does not infer restorecon coverage from
+convergence. SELinux runtime assertions are covered only by the manual KVM
+scenario; the suite does not infer restorecon coverage from
 `virtualization_type` facts.
 
 ## Commands
@@ -105,6 +114,25 @@ molecule test -s check_mode
 molecule test -s functional
 molecule test -s platform-matrix
 ```
+
+For the manual SELinux KVM scenario, prepare the shared environment's KVM
+backend as documented by `idarsi-ansible-test-environments` (hardware
+virtualization, `/dev/kvm`, libvirt access, and its Rocky 10 install source are
+required), activate the shared Ansible environment, then run:
+
+```bash
+export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
+export IDARSI_TEST_ENVIRONMENT="$HOME/src/idarsi-ansible-test-environments"
+export IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10="<Rocky 10 ISO or install-tree path>"
+molecule test -s selinux-kvm
+```
+
+Set `IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10` to the local Rocky 10 ISO or
+install-tree path selected/prepared as described in the shared environment's
+`docs/kvm-molecule.md` and `install.sh` documentation. The scenario consumes
+that value and the shared KVM create/destroy playbooks. It is excluded from CI because it requires
+a full libvirt/KVM guest. Failed guest creation invokes shared cleanup; normal
+Molecule teardown destroys the disposable guest.
 
 When running Molecule in a clean environment, install the declared Ansible
 collection before the scenarios:

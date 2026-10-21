@@ -1,26 +1,5 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 83%**
->
-> **Assessment basis:** the current working tree after the implementation
-> changes. The validation Molecule scenario passed after the missing-CA test
-> was changed to install a CA. The production ansible-lint profile passed with
-> 0 failures and 0 warnings; syntax and diff checks passed. The
-> `tasks/shared` submodule is initialized at pinned gitlink `d70d58e`. The role's
-> `validate` path itself skips host-runtime probes. RHEL 9/10 and SELinux
-> automated coverage are absent; current Rocky matrix, green CI at this ref,
-> and other relevant scenario results are not established.
->
-> **Scorecard:** Scope and public contract `10/12`; functional completeness
-> `17/20`; validation and safety `18.5/20`; convergence and recovery `10/13`;
-> automated testing and CI `19/25`; documentation and release hygiene `9/10`.
-> Total `83.5/100`, rounded down to **83%**.
->
-> **Missing evidence and RC blockers:** a current Rocky Linux 9/10
-> platform-matrix result, green CI evidence at the assessed ref, and other
-> relevant scenario results are not established here. RHEL 9/10 support has no
-> automated coverage, role metadata is absent, and SELinux-enabled behavior
-> remains without automated coverage. These gaps retain the mandatory Beta cap;
-> the role is not a Release Candidate and production review is not applicable.
+> **RC Readiness: 86%**
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================

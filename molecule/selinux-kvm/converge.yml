@@ -1,0 +1,38 @@
+---
+- name: "Converge the role with SELinux enforcing"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Require SELinux to be enabled and enforcing on the KVM guest"
+      ansible.builtin.assert:
+        that:
+          - "ansible_selinux.status == 'enabled'"
+          - "ansible_selinux.mode == 'enforcing'"
+        fail_msg: "The KVM guest must boot with SELinux enabled and enforcing."
+
+    - name: "Install test prerequisite for SELinux label management"
+      ansible.builtin.dnf:
+        name: "policycoreutils-python-utils"
+        state: "present"
+
+    - name: "Install an Nginx website and role-managed content"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "selinux.example.org"
+                autoconfigure: "website"
+                ssl_certificate_type: "none"
+            directories:
+              - path: "/var/www/selinux.example.org/html"
+                mode: "0755"
+            files:
+              - path: "/var/www/selinux.example.org/html/selinux-check.txt"
+                content: "nginx-selinux-content\n"
+                mode: "0644"
+                selinux:
+                  setype: "httpd_sys_content_t"
