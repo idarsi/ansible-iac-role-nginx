@@ -173,10 +173,12 @@ accounts; the role does not invent accounts or widen permissions. Optional
 Traversal components, empty components, broad parent paths, and protected
 paths such as `/etc/passwd` are rejected before any mutation. Safe paths such
 as `/srv/data` and `/var/www` remain valid.
-The role also resolves managed paths with `realpath -m` before mutation to
-detect parent-symlink resolution into protected roots. This is a preflight
-guard, not an atomic protection against a privileged actor changing a parent
-symlink between validation and the filesystem operation.
+For states that inspect or change host state, the role resolves managed paths
+with `realpath -m` before state work to detect parent-symlink resolution into
+protected roots. The `validate` state intentionally performs no host-runtime
+probes. This is a preflight guard, not an atomic protection against a
+privileged actor changing a parent symlink between validation and the
+filesystem operation.
 
 ```yaml
 iac_blueprint:

@@ -201,13 +201,13 @@
             proxy_pass: "https://backend.example.org"
             proxy_ssl_verify: false
 
-- name: "Reject a missing CA file when HTTPS upstream verification is enabled"
+- name: "Reject a missing CA file during install preflight before convergence"
   block:
-    - name: "Validate the missing required upstream CA file"
+    - name: "Run install preflight with a missing required upstream CA file"
       ansible.builtin.include_role:
         name: "{{ playbook_dir | dirname | dirname }}"
       vars:
-        state: "validate"
+        state: "install"
         nginx_proxy_ssl_trusted_certificate: "/var/tmp/nginx-missing-ca.crt"
         iac_blueprint:
           nginx:

@@ -1,4 +1,16 @@
 ---
+###############################################################################
+#
+# main.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# CHECKING REQUIREMENTS
+###############################################################################
+
 - name: "Check that the operating system is supported"
   ansible.builtin.fail:
     msg: "Unsupported operating system: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_major_version'] }}"
@@ -6,6 +18,24 @@
     iac_supported_os | selectattr('name', 'equalto', ansible_facts['distribution'])
     | selectattr('versions', 'contains', ansible_facts['distribution_major_version'])
     | list | length == 0
+
+- name: "Check that the blueprint is defined"
+  ansible.builtin.assert:
+    that:
+      - iac_blueprint is defined
+    fail_msg: "iac_blueprint is required."
+
+- name: "Check that the blueprint root is a mapping"
+  ansible.builtin.assert:
+    that:
+      - iac_blueprint is mapping
+    fail_msg: "iac_blueprint must be a mapping containing nginx."
+
+- name: "Check that the Nginx blueprint is defined"
+  ansible.builtin.assert:
+    that:
+      - iac_blueprint.nginx is defined
+    fail_msg: "iac_blueprint.nginx is required."
 
 - name: "Normalize the requested state"
   ansible.builtin.set_fact:
@@ -30,28 +60,27 @@
     that: nginx_state in nginx_supported_states
     fail_msg: "Unsupported Nginx state '{{ nginx_state }}'. Supported states: {{ nginx_supported_states | join(', ') }}."
 
-- name: "Check that the blueprint is defined"
-  ansible.builtin.assert:
-    that:
-      - iac_blueprint is defined
-      - iac_blueprint.nginx is defined
-    fail_msg: "iac_blueprint.nginx is required."
-
 - name: "Validate the complete blueprint before host changes"
   ansible.builtin.include_tasks: validate.yml
 
 - name: "Validate the HTTPS upstream trust store before host changes"
   ansible.builtin.include_tasks: proxy_ssl_preflight.yml
-  when: nginx_state in ['validate', 'install', 'site_present', 'site_enabled', 'location_present', 'location_absent', 'started']
+  when: nginx_state in ['install', 'site_present', 'site_enabled', 'location_present', 'location_absent', 'started']
+
+- name: "Validate canonical filesystem paths before state work"
+  ansible.builtin.include_tasks: canonical_path_preflight.yml
+  when: nginx_state != 'validate'
 
 - name: "Capture pre-convergence Nginx ownership state"
   ansible.builtin.stat:
     path: "{{ nginx_etc_directory }}"
   register: nginx_etc_preflight_stat
+  when: nginx_state != 'validate'
 
 - name: "Remember whether the Nginx configuration pre-existed"
   ansible.builtin.set_fact:
     nginx_etc_preexisting: "{{ nginx_etc_preflight_stat.stat.exists }}"
+  when: nginx_state != 'validate'
 
 - name: "Normalize configured sites"
   ansible.builtin.set_fact:
