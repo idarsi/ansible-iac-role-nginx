@@ -2,3 +2,4 @@ ansible.cfg
 .ansible
 .ansible_async
 .ansible-lint
+commit.txt
