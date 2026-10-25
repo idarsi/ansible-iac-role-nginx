@@ -59,15 +59,19 @@ The default state is `present`.
 
 | State | Meaning |
 |---|---|
-| `validate` | Validate the complete blueprint without installing packages, writing files, or changing services. |
-| `present` | Converge packages, repository, shared configuration, filesystem resources, binds, and cron. |
-| `install` | `present`, then create/enable configured sites and start Nginx. |
-| `absent` | Stop Nginx, remove declared shared resources and the package, and remove the repository only when the ownership pair permits it. |
-| `uninstall` | Destructive removal; requires `nginx_uninstall_confirm: true`. Configuration removal also requires `nginx_uninstall_remove_config: true`. |
-| `site_present` / `site_absent` | Create or remove a named site's role-managed configuration and unified enablement link. Site data directories and certificates are retained by `site_absent`. |
-| `site_enabled` / `site_disabled` | Create or remove the named site's unified enablement link. |
-| `location_present` / `location_absent` | Render or omit the declared locations for a site. |
-| `started` / `stopped` | Start or stop the service without changing boot enablement. |
+| [`validate`](docs/states/validate.md) | Validate the complete blueprint without installing packages, writing files, or changing services. |
+| [`present`](docs/states/present.md) | Converge packages, repository, shared configuration, filesystem resources, binds, and cron. |
+| [`install`](docs/states/install.md) | `present`, then create/enable configured sites and start Nginx. |
+| [`absent`](docs/states/absent.md) | Stop Nginx, remove declared shared resources and the package, and remove the repository only when the ownership pair permits it. |
+| [`uninstall`](docs/states/uninstall.md) | Destructive removal; requires `nginx_uninstall_confirm: true`. Configuration removal also requires `nginx_uninstall_remove_config: true`. |
+| [`site_present`](docs/states/site_present.md) | Create a named site's role-managed configuration; site data directories and certificates are retained when removing the site. |
+| [`site_absent`](docs/states/site_absent.md) | Remove named site's role-owned configuration and enablement link; site data directories and certificates are retained. |
+| [`site_enabled`](docs/states/site_enabled.md) | Ensure configured named site's server configuration is enabled. |
+| [`site_disabled`](docs/states/site_disabled.md) | Ensure configured named site's server configuration is disabled. |
+| [`location_present`](docs/states/location_present.md) | Render the declared locations for a site. |
+| [`location_absent`](docs/states/location_absent.md) | Render the site's configuration without its declared locations. |
+| [`started`](docs/states/started.md) | Start Nginx without changing boot enablement. |
+| [`stopped`](docs/states/stopped.md) | Stop Nginx when installed, without removing it or changing boot enablement. |
 
 Unknown states fail before convergence. Uninstall never removes an existing
 `nginx_etc_directory` unless the role-created marker and validated ownership
