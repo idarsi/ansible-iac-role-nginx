@@ -292,6 +292,8 @@
 
 - name: "Reject each invalid proxy_set_header list shape"
   ansible.builtin.include_tasks: reject_proxy_header_list.yml
+  vars:
+    invalid_proxy_header_list: "{{ proxy_header_list_case }}"
   loop:
     - 123
     - ["valid", 123]
@@ -299,7 +301,7 @@
     - [""]
     - ["X-Test value; return 200"]
   loop_control:
-    loop_var: invalid_proxy_header_list
+    loop_var: proxy_header_list_case
 
 - name: "Render proxy_set_header lists and scalar"
   ansible.builtin.set_fact:
