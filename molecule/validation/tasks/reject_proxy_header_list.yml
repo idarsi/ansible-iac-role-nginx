@@ -1,0 +1,26 @@
+---
+- name: "Reject invalid proxy_set_header list value"
+  block:
+    - name: "Validate invalid proxy_set_header list value"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "invalid-header-list.example.org"
+                autoconfigure: "proxy"
+                proxy_pass: "http://backend.example.org"
+                locations:
+                  - path: "/bad"
+                    autoconfigure: "proxy"
+                    proxy_set_header: "{{ invalid_proxy_header_list }}"
+    - name: "Fail if invalid proxy_set_header list was accepted"
+      ansible.builtin.fail:
+        msg: "Invalid proxy_set_header list was accepted"
+  rescue:
+    - name: "Confirm invalid proxy_set_header list was rejected"
+      ansible.builtin.assert:
+        that:
+          - ansible_failed_task.name == "Validate invalid proxy_set_header list value"

@@ -238,6 +238,112 @@
             autoconfigure: "proxy"
             proxy_pass: "https://backend.example.org"
 
+- name: "Accept proxy_set_header lists for site and manual locations"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "validate"
+    iac_blueprint:
+      nginx:
+        sites:
+          - name: "header-list.example.org"
+            autoconfigure: "proxy"
+            proxy_pass: "http://backend.example.org"
+            locations:
+              - path: "/site-list"
+                autoconfigure: "proxy"
+                redirect_to: "http://backend.example.org/site-list"
+                proxy_set_header:
+                  - "X-One one"
+                  - "X-Two two"
+          - name: "manual-header-list.example.org"
+            autoconfigure: "none"
+            ssl_certificate_type: "none"
+            servers:
+              - listen: "8081"
+                locations:
+                  - path: "/manual-list"
+                    redirect_to: "http://backend.example.org/manual-list"
+                    proxy_set_header:
+                      - "X-One one"
+                      - "X-Two two"
+
+- name: "Reject invalid proxy_set_header lists"
+  block:
+    - name: "Validate the invalid proxy_set_header list"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "invalid-header-list.example.org"
+                autoconfigure: "proxy"
+                proxy_pass: "http://backend.example.org"
+                locations:
+                  - path: "/bad"
+                    autoconfigure: "proxy"
+                    proxy_set_header: "{{ invalid_proxy_header_list }}"
+  rescue:
+    - name: "Record proxy_set_header list validation rejection"
+      ansible.builtin.set_fact:
+        proxy_header_list_rejected: true
+
+- name: "Reject each invalid proxy_set_header list shape"
+  ansible.builtin.include_tasks: reject_proxy_header_list.yml
+  loop:
+    - 123
+    - ["valid", 123]
+    - []
+    - [""]
+    - ["X-Test value; return 200"]
+  loop_control:
+    loop_var: invalid_proxy_header_list
+
+- name: "Render proxy_set_header lists and scalar"
+  ansible.builtin.set_fact:
+    proxy_header_render_http: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_http.j2', template_vars={
+      'nginx_site': {'name': 'headers.example.org', 'proxy_pass': 'http://backend.example.org',
+      'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}, 'nginx_render_locations': true}) }}
+    proxy_header_render_https: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_443.j2', template_vars={
+      'nginx_site': {'name': 'headers.example.org', 'proxy_pass': 'https://backend.example.org',
+      'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}, 'nginx_public_key_directory': '/etc/pki/tls/certs',
+      'nginx_private_key_directory': '/etc/pki/tls/private', 'nginx_proxy_ssl_verify': false,
+      'nginx_render_locations': true}) }}
+    proxy_header_render_website_http: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_website_http.j2', template_vars={
+      'nginx_site': {'name': 'headers.example.org', 'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}}) }}
+    proxy_header_render_website_tls: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_website_tls.j2', template_vars={
+      'nginx_site': {'name': 'headers.example.org', 'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}, 'nginx_public_key_directory': '/etc/pki/tls/certs',
+      'nginx_private_key_directory': '/etc/pki/tls/private'}) }}
+    proxy_header_render_macro: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site.j2', template_vars={
+      'nginx_site': {'name': 'headers.example.org', 'servers': [{'listen': '8082', 'locations': [
+      {'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}]}, 'nginx_render_locations': true}) }}
+
+- name: "Assert proxy_set_header rendering cardinality"
+  ansible.builtin.assert:
+    that:
+      - "proxy_header_render_http | regex_findall('proxy_set_header X-One one;') | length == 1"
+      - "proxy_header_render_https | regex_findall('proxy_set_header X-One one;') | length == 1"
+      - "proxy_header_render_website_http | regex_findall('proxy_set_header X-One one;') | length == 1"
+      - "proxy_header_render_website_tls | regex_findall('proxy_set_header X-One one;') | length == 1"
+      - "proxy_header_render_macro | regex_findall('proxy_set_header X-One one;') | length == 1"
+      - "proxy_header_render_http | regex_findall('proxy_set_header X-Scalar value;') | length == 1"
+      - "proxy_header_render_https | regex_findall('proxy_set_header X-Scalar value;') | length == 1"
+      - "proxy_header_render_website_http | regex_findall('proxy_set_header X-Scalar value;') | length == 1"
+      - "proxy_header_render_website_tls | regex_findall('proxy_set_header X-Scalar value;') | length == 1"
+      - "proxy_header_render_macro | regex_findall('proxy_set_header X-Scalar value;') | length == 1"
+
 - name: "Render HTTPS proxy security defaults and overrides"
   ansible.builtin.set_fact:
     security_validation_https_default: >-
