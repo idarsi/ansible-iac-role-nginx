@@ -7,7 +7,13 @@ server {
 {% for location in nginx_site.locations %}
   location {{ location.path }} {
 {% for directive, value in location.items() if directive not in ['path', 'autoconfigure', 'redirect_to'] and value is not none %}
+{% if directive == 'proxy_set_header' and value is iterable and value is not string %}
+{% for header in value %}
+    {{ directive }} {{ header }};
+{% endfor %}
+{% else %}
     {{ directive }} {{ value }};
+{% endif %}
 {% endfor %}
   }
 {% endfor %}
