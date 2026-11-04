@@ -467,7 +467,7 @@
             lookup('file', (playbook_dir | dirname | dirname) ~ '/handlers/main.yml') is search(
             '(?s)name: "Reload Nginx".*?systemd_service:.*?name:.*?iac_service_name.*?get\(.*?iac_service_name.*?\.service')
           - >-
-            lookup('file', (playbook_dir | dirname) ~ '/lifecycle/tasks/handler_reload_regression.yml') is search(
+            lookup('file', (playbook_dir | dirname) ~ '/podman-lifecycle/tasks/handler_reload_regression.yml') is search(
             '(?s)os\.replace\(temporary, counter\).*?subprocess\.run\(\["/usr/sbin/nginx", "-s", "reload"\]')
 
     - name: "Verify reload service-fact lookup supports public service-name overrides"
