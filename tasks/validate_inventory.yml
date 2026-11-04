@@ -424,6 +424,33 @@
       - "(nginx_location_record.path | regex_replace('[^A-Za-z0-9._~!$&()*+,=:@%/-]', '')) == nginx_location_record.path"
       - "nginx_location_record.autoconfigure | default('none') in ['none', 'proxy']"
       - "(nginx_location_record.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length) == 0"
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) == 'str' or
+        (nginx_location_record.proxy_set_header | type_debug) == 'list'
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'list' or
+        (nginx_location_record.proxy_set_header | map('type_debug') |
+        reject('equalto', 'str') | list | length) == 0
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'list' or
+        (nginx_location_record.proxy_set_header | map('string') |
+        select('match', '^\\s*$') | list | length) == 0
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'list' or
+        nginx_location_record.proxy_set_header | length > 0
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'str' or
+        nginx_location_record.proxy_set_header | length > 0
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'list' or
+        (nginx_location_record.proxy_set_header | select('search', '[;{}#\\r\\n]') |
+        list | length) == 0
       - "(nginx_location_record.values() | map('string') | select('search', '[;{}#\\r\\n]') | list | length) == 0"
       - "nginx_location_record.proxy_ssl_verify is not defined or nginx_location_record.proxy_ssl_verify is boolean"
       - >-

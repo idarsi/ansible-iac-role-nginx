@@ -1,5 +1,5 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 86%**
+> **RC Readiness: 81%**
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
@@ -119,7 +119,10 @@ may use `autoconfigure: "proxy"` with a required HTTP(S) `redirect_to`, or may
  their collection. The proxy preset owns `/`, so `/` cannot be declared as an
  additional proxy-site location. The supported location security fields are:
 
- * `auth_request`: a local absolute URI beginning with `/`. Only
+  * `proxy_set_header`: a string (`"Header value"`) or list of strings. Lists
+    render one repeated directive per entry; values must be strings without
+    Nginx directive delimiters or line breaks.
+  * `auth_request`: a local absolute URI beginning with `/`. Only
    `A-Za-z0-9._~!$&()*+,=:@%/?-` are allowed; schemes, whitespace, semicolons,
    braces, comments, and line breaks are rejected.
  * `internal`: boolean `true` or the empty string `""`, both rendered as the

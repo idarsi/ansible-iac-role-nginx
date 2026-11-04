@@ -51,6 +51,16 @@
 {% endif %}
 {% endmacro %}
 
+{% macro render_directive(k, v) %}
+{% if k == 'proxy_set_header' and v is iterable and v is not string %}
+{% for entry in v %}
+    {{ k }} {{ entry }};
+{% endfor %}
+{% else %}
+    {{ k }} {{ render_value(v) }};
+{% endif %}
+{% endmacro %}
+
 {% macro render_location_security(d) %}
 {% if d.auth_request is defined and d.auth_request is not none %}
  auth_request {{ d.auth_request }};
@@ -85,7 +95,7 @@ location {{ loc.path | default('/') }} {
 {{ render_access_control(loc, inherited) }}
 {{ render_location_security(loc) }}
 {% for k, v in loc.items() if k in ['proxy_set_header', 'proxy_redirect', 'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout', 'proxy_connect_timeout'] and v is not none %}
-    {{ k }} {{ render_value(v) }};
+{{ render_directive(k, v) }}
 {% endfor %}
 }
 {% else %}
@@ -93,7 +103,7 @@ location {{ loc.path | default('/') }} {
 location {{ loc.path | default('/') }} {
 {{ render_location_security(loc) }}
 {% for k, v in loc.items() if k not in ['path', 'auth_request', 'internal'] and v is not none %}
-    {{ k }} {{ render_value(v) }};
+{{ render_directive(k, v) }}
 {% endfor %}
 }
 {% endif %}
