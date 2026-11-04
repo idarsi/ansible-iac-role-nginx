@@ -268,28 +268,6 @@
                       - "X-One one"
                       - "X-Two two"
 
-- name: "Reject invalid proxy_set_header lists"
-  block:
-    - name: "Validate the invalid proxy_set_header list"
-      ansible.builtin.include_role:
-        name: "{{ playbook_dir | dirname | dirname }}"
-      vars:
-        state: "validate"
-        iac_blueprint:
-          nginx:
-            sites:
-              - name: "invalid-header-list.example.org"
-                autoconfigure: "proxy"
-                proxy_pass: "http://backend.example.org"
-                locations:
-                  - path: "/bad"
-                    autoconfigure: "proxy"
-                    proxy_set_header: "{{ invalid_proxy_header_list }}"
-  rescue:
-    - name: "Record proxy_set_header list validation rejection"
-      ansible.builtin.set_fact:
-        proxy_header_list_rejected: true
-
 - name: "Reject each invalid proxy_set_header list shape"
   ansible.builtin.include_tasks: reject_proxy_header_list.yml
   vars:
@@ -299,6 +277,7 @@
     - ["valid", 123]
     - []
     - [""]
+    - ["X-Test value", "  "]
     - ["X-Test value; return 200"]
   loop_control:
     loop_var: proxy_header_list_case
@@ -320,12 +299,12 @@
     proxy_header_render_website_http: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_website_http.j2', template_vars={
       'nginx_site': {'name': 'headers.example.org', 'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
-      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}}) }}
+      {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}, 'nginx_www_directory': '/var/www'}) }}
     proxy_header_render_website_tls: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_website_tls.j2', template_vars={
       'nginx_site': {'name': 'headers.example.org', 'locations': [{'path': '/list', 'proxy_set_header': ['X-One one', 'X-Two two']},
       {'path': '/scalar', 'proxy_set_header': 'X-Scalar value'}]}, 'nginx_public_key_directory': '/etc/pki/tls/certs',
-      'nginx_private_key_directory': '/etc/pki/tls/private'}) }}
+      'nginx_private_key_directory': '/etc/pki/tls/private', 'nginx_www_directory': '/var/www'}) }}
     proxy_header_render_macro: >-
       {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site.j2', template_vars={
       'nginx_site': {'name': 'headers.example.org', 'servers': [{'listen': '8082', 'locations': [

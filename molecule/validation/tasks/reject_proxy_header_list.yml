@@ -15,6 +15,7 @@
                 locations:
                   - path: "/bad"
                     autoconfigure: "proxy"
+                    redirect_to: "http://backend.example.org"
                     proxy_set_header: "{{ invalid_proxy_header_list }}"
     - name: "Fail if invalid proxy_set_header list was accepted"
       ansible.builtin.fail:
@@ -23,4 +24,4 @@
     - name: "Confirm invalid proxy_set_header list was rejected"
       ansible.builtin.assert:
         that:
-          - ansible_failed_task.name == "Validate invalid proxy_set_header list value"
+          - ansible_failed_task.name == "Validate location records"
