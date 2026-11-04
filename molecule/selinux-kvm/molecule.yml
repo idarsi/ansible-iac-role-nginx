@@ -20,7 +20,7 @@ ansible:
     destroy: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/destroy.yml"
 
 platforms:
-  - name: "rocky10"
+  - name: "nginx-selinux-kvm-rocky10"
     install_source: "${IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10}"
     kickstart: "${IDARSI_TEST_ENVIRONMENT}/examples/molecule-kvm/rocky9-10.ks.tmpl"
     memory_mb: 4096
