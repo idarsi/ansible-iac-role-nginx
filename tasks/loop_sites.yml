@@ -25,5 +25,7 @@
   ansible.builtin.include_tasks: "{{ nginx_loop_state }}.yml"
   loop: "{{ nginx_sites }}"
   loop_control:
-    loop_var: nginx_site
-    label: "{{ nginx_site.name | default('redacted') }}"
+    loop_var: nginx_loop_site
+    label: "{{ nginx_loop_site.name | default('redacted') }}"
+  vars:
+    nginx_site: "{{ nginx_loop_site }}"
