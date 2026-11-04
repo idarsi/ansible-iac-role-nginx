@@ -13,7 +13,7 @@
       - "validation_site_normalization_sources[0] is search('Normalize configured sites[\\s\\S]+?ansible.builtin.set_fact:[\\s\\S]+?no_log: true')"
       - "validation_site_normalization_sources[1] is search('Build normalized Nginx location list[\\s\\S]+?ansible.builtin.set_fact:[\\s\\S]+?no_log: true')"
       - "validation_site_normalization_sources[1] is search('Build normalized Nginx server list[\\s\\S]+?ansible.builtin.set_fact:[\\s\\S]+?no_log: true')"
-      - "validation_site_normalization_sources[2] is search('loop_var: nginx_site[\\s\\S]+?label:')"
+      - "validation_site_normalization_sources[2] is search('loop_var: nginx_loop_site[\\s\\S]+?label:')"
       - "validation_site_normalization_sources[2] is not search('Looping through sites[\\s\\S]+?no_log: true')"
       - "validation_site_normalization_sources[3] is search('loop_var: nginx_server[\\s\\S]+?label:')"
     fail_msg: "Site records must not be exposed by normalization or site loop task output."

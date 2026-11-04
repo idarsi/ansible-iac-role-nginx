@@ -2,7 +2,7 @@
 driver:
   name: "podman"
 platforms:
-  - name: "rocky9"
+  - name: "nginx-check_mode-rocky9"
     image: "docker.io/rockylinux/rockylinux:9-ubi-init"
     pre_build_image: true
     privileged: true
