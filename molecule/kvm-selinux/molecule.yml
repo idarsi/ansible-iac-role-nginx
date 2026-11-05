@@ -1,6 +1,6 @@
 ---
 scenario:
-  name: "selinux-kvm"
+  name: "kvm-selinux"
   test_sequence:
     - "syntax"
     - "create"

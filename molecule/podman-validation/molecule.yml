@@ -2,26 +2,24 @@
 driver:
   name: "podman"
 platforms:
-  - name: "nginx-functional-rocky9"
-    image: "docker.io/rockylinux/rockylinux:9-ubi-init"
+  - name: "nginx-validation-rocky9"
+    image: "quay.io/rockylinux/rockylinux:9"
     pre_build_image: true
-    privileged: true
-    command: "/usr/lib/systemd/systemd"
-    volumes:
-      - "/sys/fs/cgroup:/sys/fs/cgroup:rw"
 provisioner:
   name: "ansible"
   config_options:
     defaults:
       interpreter_python: "auto_silent"
+      # The validation image has a writable /tmp; do not rely on the remote
+      # user's home directory for Ansible's temporary files.
+      remote_tmp: "/tmp/.ansible/tmp"
 verifier:
   name: "ansible"
 scenario:
-  name: "functional"
+  name: "podman-validation"
   test_sequence:
     - "syntax"
     - "create"
     - "converge"
-    - "idempotence"
     - "verify"
     - "destroy"

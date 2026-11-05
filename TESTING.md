@@ -4,18 +4,18 @@
 
 | Platform/image | Ansible or application versions | Molecule scenarios | Main coverage |
 |---|---|---|---|
-| Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | ansible-core 2.21.3; nginx stable | `validation` | Validation and no-mutation contract |
-| Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | ansible-core 2.21.3; nginx stable | `guardrails`, `lifecycle`, `check_mode`, `functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
-| Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | ansible-core 2.21.3; nginx stable | `platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
-| Rocky Linux 10 KVM guest (shared test-environment Kickstart) | ansible-core 2.21.3; nginx stable; SELinux enforcing | `selinux-kvm` (manual) | Policy persistence, role-managed content label, HTTP access, and idempotence |
+| Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | ansible-core 2.21.3; nginx stable | `podman-validation` | Validation and no-mutation contract |
+| Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | ansible-core 2.21.3; nginx stable | `podman-guardrails`, `podman-lifecycle`, `podman-check-mode`, `podman-functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
+| Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | ansible-core 2.21.3; nginx stable | `podman-platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
+| Rocky Linux 10 KVM guest (shared test-environment Kickstart) | ansible-core 2.21.3; nginx stable; SELinux enforcing | `kvm-selinux` (manual) | Policy persistence, role-managed content label, HTTP access, and idempotence |
 
 Rocky Linux 9 and 10 are automatically tested by the scheduled
-`platform-matrix` scenario. RHEL 9/10 are supported by the role but are not
+`podman-platform-matrix` scenario. RHEL 9/10 are supported by the role but are not
 automatically covered here.
 
 ## Scenario coverage
 
-* `validation` checks valid input, invalid site/TLS/repository paths, duplicate
+* `podman-validation` checks valid input, invalid site/TLS/repository paths, duplicate
   and reserved server-level locations, supported states, and validation-only preservation of the
   pre-existing package, service, and role-managed path state. It also rejects
   a string value for the `sites` collection and mapping values for all five
@@ -38,12 +38,12 @@ automatically covered here.
   check-mode package-present fixture correctly predicts a change on every run
   because `nginx-core` is never installed. Production idempotence is covered
   by the lifecycle and functional scenarios.
-* `guardrails` verifies uninstall confirmation, external repository/site and
+* `podman-guardrails` verifies uninstall confirmation, external repository/site and
   unrelated-file preservation, manifest ownership filtering, preservation of an
   unmanaged nested file below a manifest-owned directory after opt-in owned
   cleanup, and absent-state rejection of wrong markers and corrupt manifests
   without package or repository mutation.
-* `lifecycle` verifies public `present`, `absent`, `uninstall`, site/location
+* `podman-lifecycle` verifies public `present`, `absent`, `uninstall`, site/location
   present/absent, enable/disable, and service stopped/started transitions.
   It verifies that the `started` state preserves a service's disabled boot
   enablement. A test-only systemd drop-in replaces `ExecReload` with an atomic
@@ -57,7 +57,7 @@ automatically covered here.
   the managed site's SHA-256 checksum before and after convergence. These are
   observable idempotence checks; `verify.yml` does not assert a systematic
   Ansible `changed=0` result for the repeated role invocations.
-* `check_mode` first rejects a root-canonicalizing path in absent state even in check mode and
+* `podman-check-mode` first rejects a root-canonicalizing path in absent state even in check mode and
   asserts the `CANONICAL_PATH_PROTECTED_ROOT` error code and message. It then
   compares package presence, service state, and managed file
   existence, checksums, and modes before and after representative check+diff
@@ -69,14 +69,14 @@ automatically covered here.
   OpenSSL key generation and repository/package
   command behavior are not claimed as safely previewable, but the test proves
   that this limitation does not mutate the repository path.
-* `functional` manages a valid public self-signed test CA through the blueprint,
+* `podman-functional` manages a valid public self-signed test CA through the blueprint,
   renders it as an HTTPS upstream trust store in the same install run, runs
   `nginx -t`, checks HTTPS/GPG repository defaults and private
   key mode `0600`, and verifies local HTTP-to-HTTPS redirect plus an actual
   HTTPS reverse-proxy response from a test-only backend on `127.0.0.1:8081`.
-* `platform-matrix` repeats the baseline on Rocky Linux 9 and 10. Privileged
+* `podman-platform-matrix` repeats the baseline on Rocky Linux 9 and 10. Privileged
   systemd and the cgroup mount are test-only Podman settings.
-* `selinux-kvm` is a manual full-VM scenario, not part of pull-request or
+* `kvm-selinux` is a manual full-VM scenario, not part of pull-request or
   scheduled CI. It fails immediately unless SELinux is enabled and enforcing,
   installs the guest's test-only `policycoreutils-python-utils` prerequisite
   (which provides `semanage` on Rocky Linux 10), installs a website with
@@ -105,14 +105,14 @@ or collections:
 
 ```bash
 export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
-ansible-playbook --syntax-check -i localhost, -c local molecule/validation/converge.yml
+ansible-playbook --syntax-check -i localhost, -c local molecule/podman-validation/converge.yml
 ansible-lint --profile production
-molecule test -s validation
-molecule test -s guardrails
-molecule test -s lifecycle
-molecule test -s check_mode
-molecule test -s functional
-molecule test -s platform-matrix
+molecule test -s podman-validation
+molecule test -s podman-guardrails
+molecule test -s podman-lifecycle
+molecule test -s podman-check-mode
+molecule test -s podman-functional
+molecule test -s podman-platform-matrix
 ```
 
 For the manual SELinux KVM scenario, prepare the shared environment's KVM
@@ -124,7 +124,7 @@ required), activate the shared Ansible environment, then run:
 export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
 export IDARSI_TEST_ENVIRONMENT="$HOME/src/idarsi-ansible-test-environments"
 export IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10="<Rocky 10 ISO or install-tree path>"
-molecule test -s selinux-kvm
+molecule test -s kvm-selinux
 ```
 
 Set `IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10` to the local Rocky 10 ISO or
