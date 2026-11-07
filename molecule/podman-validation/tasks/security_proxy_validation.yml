@@ -38,7 +38,7 @@
       ansible.builtin.set_fact:
         security_validation_invalid_auth_request_rejected: true
         security_validation_invalid_auth_request_code: "{{ nginx_validation_error_code | default('') | string }}"
-        security_validation_invalid_auth_request_message: "{{ ansible_failed_result | to_nice_json }}"
+        security_validation_invalid_auth_request_message: "{{ ansible_failed_result.msg | default('') | string }}"
 
 - name: "Reject a string site proxy SSL override"
   block:
@@ -268,6 +268,65 @@
                       - "X-One one"
                       - "X-Two two"
 
+- name: "Accept a quoted proxy_set_header value with trailing whitespace"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "validate"
+    iac_blueprint:
+        nginx:
+          files:
+            - path: "/var/tmp/nginx-relative-source.conf"
+              src: "{{ role_path }}/files/nginx-relative-source.conf"
+        sites:
+          - name: "quoted-header.example.org"
+            autoconfigure: "proxy"
+            proxy_pass: "http://backend.example.org"
+            locations:
+              - path: "/quoted"
+                autoconfigure: "proxy"
+                redirect_to: "http://backend.example.org/quoted"
+                proxy_set_header:
+                  - 'X-Test "value "'
+
+- name: "Reject a role files symlink that resolves outside files"
+  block:
+    - name: "Create a symlink escaping the role files directory"
+      ansible.builtin.file:
+        path: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
+        src: "/etc/passwd"
+        state: "link"
+
+    - name: "Validate the escaping relative source"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            files:
+              - path: "/var/tmp/nginx-validation-escape.conf"
+                src: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
+            sites: []
+  rescue:
+    - name: "Record the expected escaping source rejection"
+      ansible.builtin.set_fact:
+        security_validation_symlink_escape_rejected: true
+        security_validation_symlink_escape_message: "{{ ansible_failed_result.msg | default('') }}"
+  always:
+    - name: "Remove the generated escaping symlink"
+      ansible.builtin.file:
+        path: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
+        state: "absent"
+
+- name: "Render a quoted proxy_set_header value with trailing whitespace"
+  ansible.builtin.set_fact:
+    security_validation_quoted_header: >-
+      {{ lookup('template', (playbook_dir | dirname | dirname) ~ '/templates/site_proxy_http.j2', template_vars={
+      'nginx_site': {'name': 'quoted-header.example.org', 'proxy_pass': 'http://backend.example.org',
+      'locations': [{'path': '/quoted', 'proxy_set_header': ['X-Test "value "']}]},
+      'nginx_render_locations': true}) }}
+
 - name: "Reject each invalid proxy_set_header list shape"
   ansible.builtin.include_tasks: reject_proxy_header_list.yml
   vars:
@@ -278,9 +337,15 @@
     - []
     - [""]
     - ["X-Test value", "  "]
+    - ["X-Only"]
     - ["X-Test value; return 200"]
   loop_control:
     loop_var: proxy_header_list_case
+
+- name: "Reject malformed scalar proxy_set_header value"
+  ansible.builtin.include_tasks: reject_proxy_header_list.yml
+  vars:
+    invalid_proxy_header_list: "123"
 
 - name: "Render proxy_set_header lists and scalar"
   ansible.builtin.set_fact:
@@ -423,6 +488,7 @@
       - security_validation_unsupported_location_rejected | default(false) | bool
       - security_validation_unsupported_location_code == "LOCATION_ACCESS_CONTROL_INVALID"
       - security_validation_ca_path_rejected | default(false) | bool
+      - security_validation_symlink_escape_rejected | default(false) | bool
       - "'Nginx role defaults contain an invalid path, option, or safety setting.' in security_validation_ca_path_message"
       - security_validation_missing_ca_rejected | default(false) | bool
       - "'HTTPS upstream verification requires nginx_proxy_ssl_trusted_certificate' in security_validation_missing_ca_message"
@@ -430,10 +496,7 @@
       - security_validation_string_location_code == "LOCATION_PROXY_SSL_VERIFY_INVALID"
       - "security_validation_invalid_auth_request_rejected | default(false) | bool"
       - "security_validation_invalid_auth_request_code == 'LOCATION_ACCESS_CONTROL_INVALID'"
-      - "security_validation_invalid_auth_request_message | type_debug == 'str'"
-      - >-
-        security_validation_invalid_auth_request_message is search(
-        'auth_request must be an absolute local URI using the supported path characters')
+      - "'proxy_set_header X-Test \"value \";' in security_validation_quoted_header"
       - "'proxy_ssl_verify on;' in security_validation_https_default"
       - "'proxy_ssl_server_name on;' in security_validation_https_default"
       - "'proxy_ssl_trusted_certificate /etc/pki/tls/certs/test-ca-bundle.crt;' in security_validation_https_default"
