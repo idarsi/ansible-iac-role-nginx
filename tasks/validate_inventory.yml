@@ -76,7 +76,7 @@
     that:
       - "nginx_file_record is mapping"
       - nginx_file_record.path is defined
-      - (nginx_file_record.path | type_debug) == 'str'
+      - nginx_file_record.path is string
       - "nginx_file_record.path is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$')"
       - "not (nginx_file_record.path in ['/', ''])"
       - "'..' not in nginx_file_record.path.split('/')"
