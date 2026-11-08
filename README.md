@@ -1,6 +1,5 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 94%**<br>
-> Assessed ref: `6fb36d595090873a6ebf375b43e8700d62c5073e`; no production-readiness approval is evidenced.
+> **RC Readiness: 94%**
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================

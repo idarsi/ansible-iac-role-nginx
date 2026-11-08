@@ -192,7 +192,7 @@
       nginx_site_security_record.proxy_ssl_verify is not boolean) or
       (nginx_site_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
-      map(attribute='value') | map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      map(attribute='value') | reject('string') | list | length) > 0 or
       (nginx_site_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
       map(attribute='value') | map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -221,7 +221,7 @@
     - >-
       (nginx_server_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
-      map(attribute='value') | map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      map(attribute='value') | reject('string') | list | length) > 0 or
       (nginx_server_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
       map(attribute='value') | map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -272,7 +272,7 @@
       - nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy' or nginx_site_record.proxy_pass is not search('[;{}#\\r\\n]')
       - "nginx_site_record.proxy_ssl_verify is not defined or nginx_site_record.proxy_ssl_verify is boolean"
       - "(nginx_site_record.locations | default([])) is sequence"
-      - "(nginx_site_record.locations | default([]) | type_debug) != 'str'"
+      - "(nginx_site_record.locations | default([])) is not string"
       - "(nginx_site_record.locations | default([]) | map(attribute='path') | list | unique | length) == (nginx_site_record.locations | default([]) | length)"
     fail_msg: "Site records require safe names and supported boolean proxy_ssl_verify settings."
   loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
@@ -286,8 +286,7 @@
       - >-
         (nginx_site_access_record | dict2items |
         selectattr('key', 'in', nginx_site_access_keys) |
-        map(attribute='value') | map('type_debug') |
-        select('equalto', 'str') | list | length) ==
+        map(attribute='value') | select('string') | list | length) ==
         (nginx_site_access_record | dict2items |
         selectattr('key', 'in', nginx_site_access_keys) | list | length)
       - >-
@@ -328,10 +327,10 @@
     that:
       - "nginx_server_record is mapping"
       - "nginx_server_record.listen is defined"
-      - "(nginx_server_record.listen | type_debug) == 'str' or (nginx_server_record.listen | type_debug) in ['int', 'float']"
+      - "nginx_server_record.listen is string or (nginx_server_record.listen | type_debug) in ['int', 'float']"
       - "(nginx_server_record.locations | default([])) is sequence"
       - "(nginx_server_record.locations | default([])) is not string"
-      - "((nginx_server_record.server_name | default('')) | type_debug) == 'str'"
+      - "(nginx_server_record.server_name | default('')) is string"
       - "(nginx_server_record.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length) == 0"
       - >-
         (nginx_server_record | dict2items | rejectattr('key', 'equalto', 'locations') |
@@ -362,7 +361,7 @@
       - >-
         (nginx_server_access_record | dict2items |
         selectattr('key', 'in', nginx_access_control_keys) | map(attribute='value') |
-        map('type_debug') | reject('equalto', 'str') | list | length) == 0
+        reject('string') | list | length) == 0
       - >-
         (nginx_server_access_record | dict2items |
         selectattr('key', 'in', nginx_access_control_keys) | map(attribute='value') |
@@ -417,7 +416,7 @@
       list | length) > 0 or
       (nginx_location_security_record | dict2items |
       selectattr('key', 'in', nginx_location_security_keys) | map(attribute='value') |
-      map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      reject('string') | list | length) > 0 or
       (nginx_location_security_record | dict2items |
       selectattr('key', 'in', nginx_location_security_keys) | map(attribute='value') |
       map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -432,7 +431,7 @@
   ansible.builtin.assert:
     that:
       - "nginx_location_record is mapping"
-      - "((nginx_location_record.path | default(None)) | type_debug) == 'str'"
+      - "nginx_location_record.path is string"
       - "(nginx_location_record.path | default('') | length) > 0"
       - "(nginx_location_record.path | regex_replace('^/', '')) != nginx_location_record.path"
       - "(nginx_location_record.path | regex_replace('[^A-Za-z0-9._~!$&()*+,=:@%/-]', '')) == nginx_location_record.path"
@@ -440,13 +439,13 @@
       - "(nginx_location_record.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length) == 0"
       - >-
         nginx_location_record.proxy_set_header is not defined or
-        (nginx_location_record.proxy_set_header | type_debug) == 'str' or
+        nginx_location_record.proxy_set_header is string or
         (nginx_location_record.proxy_set_header | type_debug) == 'list'
       - >-
         nginx_location_record.proxy_set_header is not defined or
         (nginx_location_record.proxy_set_header | type_debug) != 'list' or
-        (nginx_location_record.proxy_set_header | map('type_debug') |
-        reject('equalto', 'str') | list | length) == 0
+        (nginx_location_record.proxy_set_header | reject('string') |
+        list | length) == 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
         (nginx_location_record.proxy_set_header | type_debug) != 'list' or
@@ -458,7 +457,7 @@
         nginx_location_record.proxy_set_header | length > 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
-        (nginx_location_record.proxy_set_header | type_debug) != 'str' or
+        nginx_location_record.proxy_set_header is not string or
         nginx_location_record.proxy_set_header | length > 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
@@ -472,7 +471,7 @@
         list | length) == nginx_location_record.proxy_set_header | length
       - >-
         nginx_location_record.proxy_set_header is not defined or
-        (nginx_location_record.proxy_set_header | type_debug) != 'str' or
+        nginx_location_record.proxy_set_header is not string or
         nginx_location_record.proxy_set_header is match('^\\s*[^\\s";{}#]+\\s+(?:"(?:[^"\\\\]|\\\\.)*"|[^\\s";{}#]+)\\s*$')
       - "(nginx_location_record.values() | map('string') | select('search', '[;{}#\\r\\n]') | list | length) == 0"
       - "nginx_location_record.proxy_ssl_verify is not defined or nginx_location_record.proxy_ssl_verify is boolean"
@@ -499,7 +498,7 @@
     label: "{{ nginx_auth_request_code_record.path | default('redacted') }}"
   when: >-
     nginx_auth_request_code_record.auth_request is defined and
-    ((nginx_auth_request_code_record.auth_request | type_debug) != 'str' or
+    (nginx_auth_request_code_record.auth_request is not string or
     not (nginx_auth_request_code_record.auth_request is match(
     '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$')))
   no_log: true
@@ -509,12 +508,12 @@
     that:
       - >-
         nginx_auth_request_record.auth_request is not defined or
-        ((nginx_auth_request_record.auth_request | type_debug) == 'str' and
+        (nginx_auth_request_record.auth_request is string and
         nginx_auth_request_record.auth_request is match(
          '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$'))
       - >-
         nginx_auth_request_record.internal is not defined or
-        ((nginx_auth_request_record.internal | type_debug) == 'str' and
+        (nginx_auth_request_record.internal is string and
         nginx_auth_request_record.internal == '') or
         (nginx_auth_request_record.internal is boolean and
         nginx_auth_request_record.internal)
@@ -543,7 +542,7 @@
   ansible.builtin.assert:
     that:
       - nginx_location_record.redirect_to is defined
-      - (nginx_location_record.redirect_to | type_debug) == 'str'
+      - nginx_location_record.redirect_to is string
     fail_msg: "Proxy locations need a string redirect_to URL."
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
@@ -566,8 +565,8 @@
 - name: "Validate sensitive location directive values without logging them"
   ansible.builtin.assert:
     that:
-      - nginx_sensitive_location_record.auth_basic is not defined or (nginx_sensitive_location_record.auth_basic | type_debug) == 'str'
-      - nginx_sensitive_location_record.auth_basic_user_file is not defined or (nginx_sensitive_location_record.auth_basic_user_file | type_debug) == 'str'
+      - nginx_sensitive_location_record.auth_basic is not defined or nginx_sensitive_location_record.auth_basic is string
+      - nginx_sensitive_location_record.auth_basic_user_file is not defined or nginx_sensitive_location_record.auth_basic_user_file is string
     fail_msg: >-
       Locations need safe values; auth_request must be an absolute local URI
       without whitespace, a scheme, or Nginx syntax.
