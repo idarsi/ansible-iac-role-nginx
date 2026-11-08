@@ -106,7 +106,10 @@
         (nginx_file_record.src | realpath) is match('^' ~ ((role_path ~ '/files') | realpath | regex_escape) ~ '/'))
       - (nginx_file_record.mode | default('0644')) is string
       - "(nginx_file_record.mode | default('0644')) is match('^0[0-7]{3,4}$')"
-    fail_msg: "File records need a safe absolute non-root destination, exactly one valid content or source payload, a controller source under role files or an absolute remote source, and an octal mode."
+    fail_msg: >-
+      File records need a safe absolute non-root destination, exactly one valid
+      content or source payload, a controller source under role files or an
+      absolute remote source, and an octal mode.
   loop: "{{ iac_blueprint.nginx.files | default([]) }}"
   loop_control:
     loop_var: nginx_file_record
@@ -483,7 +486,10 @@
          'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout',
          'proxy_connect_timeout', 'proxy_ssl_verify', 'proxy_ssl_server_name', 'auth_request', 'internal']) |
          list | length) == 0
-    fail_msg: "Locations need a safe path and valid proxy_set_header directives; proxy locations need redirect_to and boolean proxy_ssl_verify. The proxy preset reserves location /."
+    fail_msg: >-
+      Locations need a safe path and valid proxy_set_header directives; proxy
+      locations need redirect_to and boolean proxy_ssl_verify. The proxy preset
+      reserves location /.
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
     loop_var: nginx_location_record

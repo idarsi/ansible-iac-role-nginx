@@ -274,10 +274,10 @@
   vars:
     state: "validate"
     iac_blueprint:
-        nginx:
-          files:
-            - path: "/var/tmp/nginx-relative-source.conf"
-              src: "{{ role_path }}/files/nginx-relative-source.conf"
+      nginx:
+        files:
+          - path: "/var/tmp/nginx-relative-source.conf"
+            src: "{{ role_path }}/files/nginx-relative-source.conf"
         sites:
           - name: "quoted-header.example.org"
             autoconfigure: "proxy"

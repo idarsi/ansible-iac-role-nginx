@@ -428,7 +428,8 @@
           - public_path_file_rejected
           - >-
             (((public_path_file_message)
-            | regex_search("File records need a safe absolute non-root destination, exactly one valid content or source payload, a controller source under role files or an absolute remote source, and an octal mode."))
+            | regex_search("File records need a safe absolute non-root destination, exactly one valid " ~
+              "content or source payload, a controller source under role files or an absolute remote source, and an octal mode."))
             | default("", true) | length) > 0
 
     - name: "Verify unsafe controller file sources were rescued"
