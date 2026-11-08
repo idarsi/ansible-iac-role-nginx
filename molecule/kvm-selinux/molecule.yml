@@ -14,11 +14,6 @@ driver:
   options:
     managed: true
 
-ansible:
-  playbooks:
-    create: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/create.yml"
-    destroy: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/destroy.yml"
-
 platforms:
   - name: "nginx-selinux-kvm-rocky10"
     install_source: "${IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10}"
@@ -31,6 +26,9 @@ platforms:
 
 provisioner:
   name: "ansible"
+  playbooks:
+    create: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/create.yml"
+    destroy: "${IDARSI_TEST_ENVIRONMENT}/molecule/kvm/destroy.yml"
 
 verifier:
   name: "ansible"

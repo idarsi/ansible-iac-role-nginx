@@ -2,47 +2,47 @@
 - name: "Validate role defaults and managed paths"
   ansible.builtin.assert:
     that:
-      - "(nginx_etc_directory | type_debug) == 'str'"
+      - "nginx_etc_directory is string"
       - "nginx_etc_directory is match('^/etc/nginx(?:/[A-Za-z0-9._-]+)*$')"
       - "(nginx_etc_directory | string) is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$')"
       - "(nginx_etc_directory | string) is not search('[;{}#\\r\\n]')"
       - "'..' not in (nginx_etc_directory | string).split('/')"
-      - "(nginx_log_directory | type_debug) == 'str'"
+      - "nginx_log_directory is string"
       - "(nginx_log_directory | string) is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$')"
       - "(nginx_log_directory | string) is not search('[;{}#\\r\\n]')"
       - "'..' not in (nginx_log_directory | string).split('/')"
-      - "(nginx_www_directory | type_debug) == 'str'"
+      - "nginx_www_directory is string"
       - "(nginx_www_directory | string) is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$')"
       - "(nginx_www_directory | string) is not search('[;{}#\\r\\n]')"
       - "'..' not in (nginx_www_directory | string).split('/')"
-      - "(nginx_management_directory | type_debug) == 'str'"
+      - "nginx_management_directory is string"
       - "nginx_management_directory == '/var/lib/ansible-iac-role-nginx'"
-      - "(nginx_management_marker | type_debug) == 'str'"
-      - "(nginx_management_manifest | type_debug) == 'str'"
+      - "nginx_management_marker is string"
+      - "nginx_management_manifest is string"
       - "nginx_management_marker == nginx_management_directory + '/MANAGED_BY_ROLE'"
       - "nginx_management_manifest == nginx_management_directory + '/manifest.yml'"
-      - "(nginx_public_key_directory | type_debug) == 'str'"
+      - "nginx_public_key_directory is string"
       - "nginx_public_key_directory is match('^/etc/pki/tls/certs(?:/[A-Za-z0-9_.-]+)?$')"
       - "not (nginx_public_key_directory in ['/', ''])"
       - "'..' not in nginx_public_key_directory"
-      - "(nginx_private_key_directory | type_debug) == 'str'"
+      - "nginx_private_key_directory is string"
       - "nginx_private_key_directory is match('^/etc/pki/tls/private(?:/[A-Za-z0-9_.-]+)?$')"
       - "not (nginx_private_key_directory in ['/', ''])"
       - "'..' not in nginx_private_key_directory"
       - "nginx_default_site_autoconfigure in ['none', 'website', 'proxy']"
       - "nginx_default_ssl_certificate_type in ['none', 'selfsigned']"
       - "nginx_proxy_ssl_verify is boolean"
-      - "(nginx_proxy_ssl_trusted_certificate | type_debug) == 'str'"
+      - "nginx_proxy_ssl_trusted_certificate is string"
       - "nginx_proxy_ssl_trusted_certificate is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$')"
       - "'..' not in nginx_proxy_ssl_trusted_certificate.split('/')"
       - "nginx_proxy_ssl_trusted_certificate is not search('[;{}#\\r\\n]')"
       - "nginx_uninstall_confirm is boolean"
       - "nginx_uninstall_remove_config is boolean"
-      - "(iac_dnf_repo_path | type_debug) == 'str'"
+      - "iac_dnf_repo_path is string"
       - "iac_dnf_repo_path is match('^/etc/yum.repos.d/[A-Za-z0-9_.-]+\\.repo$')"
-      - "(iac_dnf_main_package | type_debug) == 'str'"
+      - "iac_dnf_main_package is string"
       - "iac_dnf_main_package is match('^[A-Za-z0-9][A-Za-z0-9+_.:-]*$')"
-      - "(iac_dnf_repo_name | type_debug) == 'str'"
+      - "iac_dnf_repo_name is string"
       - "iac_dnf_repo_name is match('^[A-Za-z0-9_.-]+$')"
     fail_msg: "Nginx role defaults contain an invalid path, option, or safety setting."
 
@@ -76,7 +76,7 @@
     that:
       - "nginx_file_record is mapping"
       - nginx_file_record.path is defined
-      - (nginx_file_record.path | type_debug) == 'str'
+      - nginx_file_record.path is string
       - "nginx_file_record.path is match('^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$')"
       - "not (nginx_file_record.path in ['/', ''])"
       - "'..' not in nginx_file_record.path.split('/')"
@@ -88,11 +88,28 @@
       - >-
         (nginx_file_record.path | regex_replace('/\\./', '/') | regex_replace('/\\.$', '')) is not match(
         '^/(?:etc/(?:passwd|shadow|group|gshadow|sudoers|hosts|fstab|ssh|systemd)|root/\\.ssh)(?:/|$)')
-      - nginx_file_record.content is defined
-      - (nginx_file_record.content | type_debug) == 'str'
-      - ((nginx_file_record.mode | default('0644')) | type_debug) == 'str'
+      - (nginx_file_record.content is defined) != (nginx_file_record.src is defined)
+      - nginx_file_record.content is not defined or nginx_file_record.content is string
+      - nginx_file_record.src is not defined or nginx_file_record.src is string
+      - nginx_file_record.remote_src is not defined or nginx_file_record.src is defined
+      - nginx_file_record.selinux is not defined or (nginx_file_record.selinux is mapping and nginx_file_record.selinux.setype is defined)
+      - nginx_file_record.src is not defined or nginx_file_record.remote_src is not defined or nginx_file_record.remote_src is boolean
+      - >-
+        nginx_file_record.src is not defined or
+        (nginx_file_record.remote_src | default(false)) is not true or
+        nginx_file_record.src is match('^/')
+      - >-
+        nginx_file_record.src is not defined or
+        (nginx_file_record.remote_src | default(false)) is true or
+        (nginx_file_record.src is match('^/') and
+        '..' not in nginx_file_record.src.split('/') and
+        (nginx_file_record.src | realpath) is match('^' ~ ((role_path ~ '/files') | realpath | regex_escape) ~ '/'))
+      - (nginx_file_record.mode | default('0644')) is string
       - "(nginx_file_record.mode | default('0644')) is match('^0[0-7]{3,4}$')"
-    fail_msg: "File records need a safe absolute non-root path without traversal or unsafe parent scope, string content, and an octal mode."
+    fail_msg: >-
+      File records need a safe absolute non-root destination, exactly one valid
+      content or source payload, a controller source under role files or an
+      absolute remote source, and an octal mode.
   loop: "{{ iac_blueprint.nginx.files | default([]) }}"
   loop_control:
     loop_var: nginx_file_record
@@ -178,7 +195,7 @@
       nginx_site_security_record.proxy_ssl_verify is not boolean) or
       (nginx_site_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
-      map(attribute='value') | map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      map(attribute='value') | reject('string') | list | length) > 0 or
       (nginx_site_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
       map(attribute='value') | map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -207,7 +224,7 @@
     - >-
       (nginx_server_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
-      map(attribute='value') | map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      map(attribute='value') | reject('string') | list | length) > 0 or
       (nginx_server_security_record | dict2items |
       selectattr('key', 'in', ['deny', 'allow', 'auth_basic', 'auth_basic_user_file']) |
       map(attribute='value') | map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -243,7 +260,7 @@
     that:
       - "nginx_site_record is mapping"
       - "nginx_site_record.name is defined"
-      - "(nginx_site_record.name | type_debug) == 'str'"
+      - "nginx_site_record.name is string"
       - "nginx_site_record.name | length > 0"
       - "nginx_site_record.name is match('^[A-Za-z0-9.-]+$')"
       - "not (nginx_site_record.name in ['.', '..'])"
@@ -251,14 +268,14 @@
       - "nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) in ['none', 'website', 'proxy']"
       - "nginx_site_record.ssl_certificate_type | default(nginx_default_ssl_certificate_type) in ['none', 'selfsigned']"
       - "nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy' or nginx_site_record.proxy_pass is defined"
-      - "nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy' or (nginx_site_record.proxy_pass | type_debug) == 'str'"
+      - "nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy' or nginx_site_record.proxy_pass is string"
       - >-
         nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy'
         or nginx_site_record.proxy_pass is match('^https?://[^\\s]+$')
       - nginx_site_record.autoconfigure | default(nginx_default_site_autoconfigure) != 'proxy' or nginx_site_record.proxy_pass is not search('[;{}#\\r\\n]')
       - "nginx_site_record.proxy_ssl_verify is not defined or nginx_site_record.proxy_ssl_verify is boolean"
       - "(nginx_site_record.locations | default([])) is sequence"
-      - "(nginx_site_record.locations | default([]) | type_debug) != 'str'"
+      - "(nginx_site_record.locations | default([])) is not string"
       - "(nginx_site_record.locations | default([]) | map(attribute='path') | list | unique | length) == (nginx_site_record.locations | default([]) | length)"
     fail_msg: "Site records require safe names and supported boolean proxy_ssl_verify settings."
   loop: "{{ iac_blueprint.nginx.sites | default([]) }}"
@@ -272,8 +289,7 @@
       - >-
         (nginx_site_access_record | dict2items |
         selectattr('key', 'in', nginx_site_access_keys) |
-        map(attribute='value') | map('type_debug') |
-        select('equalto', 'str') | list | length) ==
+        map(attribute='value') | select('string') | list | length) ==
         (nginx_site_access_record | dict2items |
         selectattr('key', 'in', nginx_site_access_keys) | list | length)
       - >-
@@ -314,10 +330,10 @@
     that:
       - "nginx_server_record is mapping"
       - "nginx_server_record.listen is defined"
-      - "(nginx_server_record.listen | type_debug) == 'str' or (nginx_server_record.listen | type_debug) in ['int', 'float']"
+      - "nginx_server_record.listen is string or (nginx_server_record.listen | type_debug) in ['int', 'float']"
       - "(nginx_server_record.locations | default([])) is sequence"
       - "(nginx_server_record.locations | default([])) is not string"
-      - "((nginx_server_record.server_name | default('')) | type_debug) == 'str'"
+      - "(nginx_server_record.server_name | default('')) is string"
       - "(nginx_server_record.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length) == 0"
       - >-
         (nginx_server_record | dict2items | rejectattr('key', 'equalto', 'locations') |
@@ -348,7 +364,7 @@
       - >-
         (nginx_server_access_record | dict2items |
         selectattr('key', 'in', nginx_access_control_keys) | map(attribute='value') |
-        map('type_debug') | reject('equalto', 'str') | list | length) == 0
+        reject('string') | list | length) == 0
       - >-
         (nginx_server_access_record | dict2items |
         selectattr('key', 'in', nginx_access_control_keys) | map(attribute='value') |
@@ -403,7 +419,7 @@
       list | length) > 0 or
       (nginx_location_security_record | dict2items |
       selectattr('key', 'in', nginx_location_security_keys) | map(attribute='value') |
-      map('type_debug') | reject('equalto', 'str') | list | length) > 0 or
+      reject('string') | list | length) > 0 or
       (nginx_location_security_record | dict2items |
       selectattr('key', 'in', nginx_location_security_keys) | map(attribute='value') |
       map('string') | select('search', '[;{}#\\r\\n]') | list | length) > 0 or
@@ -418,7 +434,7 @@
   ansible.builtin.assert:
     that:
       - "nginx_location_record is mapping"
-      - "((nginx_location_record.path | default(None)) | type_debug) == 'str'"
+      - "nginx_location_record.path is string"
       - "(nginx_location_record.path | default('') | length) > 0"
       - "(nginx_location_record.path | regex_replace('^/', '')) != nginx_location_record.path"
       - "(nginx_location_record.path | regex_replace('[^A-Za-z0-9._~!$&()*+,=:@%/-]', '')) == nginx_location_record.path"
@@ -426,13 +442,13 @@
       - "(nginx_location_record.keys() | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$') | list | length) == 0"
       - >-
         nginx_location_record.proxy_set_header is not defined or
-        (nginx_location_record.proxy_set_header | type_debug) == 'str' or
+        nginx_location_record.proxy_set_header is string or
         (nginx_location_record.proxy_set_header | type_debug) == 'list'
       - >-
         nginx_location_record.proxy_set_header is not defined or
         (nginx_location_record.proxy_set_header | type_debug) != 'list' or
-        (nginx_location_record.proxy_set_header | map('type_debug') |
-        reject('equalto', 'str') | list | length) == 0
+        (nginx_location_record.proxy_set_header | reject('string') |
+        list | length) == 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
         (nginx_location_record.proxy_set_header | type_debug) != 'list' or
@@ -444,13 +460,22 @@
         nginx_location_record.proxy_set_header | length > 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
-        (nginx_location_record.proxy_set_header | type_debug) != 'str' or
+        nginx_location_record.proxy_set_header is not string or
         nginx_location_record.proxy_set_header | length > 0
       - >-
         nginx_location_record.proxy_set_header is not defined or
         (nginx_location_record.proxy_set_header | type_debug) != 'list' or
         (nginx_location_record.proxy_set_header | select('search', '[;{}#\\r\\n]') |
         list | length) == 0
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        (nginx_location_record.proxy_set_header | type_debug) != 'list' or
+        (nginx_location_record.proxy_set_header | select('match', '^\\s*[^\\s";{}#]+\\s+(?:"(?:[^"\\\\]|\\\\.)*"|[^\\s";{}#]+)\\s*$') |
+        list | length) == nginx_location_record.proxy_set_header | length
+      - >-
+        nginx_location_record.proxy_set_header is not defined or
+        nginx_location_record.proxy_set_header is not string or
+        nginx_location_record.proxy_set_header is match('^\\s*[^\\s";{}#]+\\s+(?:"(?:[^"\\\\]|\\\\.)*"|[^\\s";{}#]+)\\s*$')
       - "(nginx_location_record.values() | map('string') | select('search', '[;{}#\\r\\n]') | list | length) == 0"
       - "nginx_location_record.proxy_ssl_verify is not defined or nginx_location_record.proxy_ssl_verify is boolean"
       - >-
@@ -461,7 +486,10 @@
          'proxy_buffering', 'proxy_http_version', 'proxy_read_timeout', 'proxy_send_timeout',
          'proxy_connect_timeout', 'proxy_ssl_verify', 'proxy_ssl_server_name', 'auth_request', 'internal']) |
          list | length) == 0
-    fail_msg: "Locations need a safe path; proxy locations need redirect_to and boolean proxy_ssl_verify. The proxy preset reserves location /."
+    fail_msg: >-
+      Locations need a safe path and valid proxy_set_header directives; proxy
+      locations need redirect_to and boolean proxy_ssl_verify. The proxy preset
+      reserves location /.
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
     loop_var: nginx_location_record
@@ -476,7 +504,7 @@
     label: "{{ nginx_auth_request_code_record.path | default('redacted') }}"
   when: >-
     nginx_auth_request_code_record.auth_request is defined and
-    ((nginx_auth_request_code_record.auth_request | type_debug) != 'str' or
+    (nginx_auth_request_code_record.auth_request is not string or
     not (nginx_auth_request_code_record.auth_request is match(
     '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$')))
   no_log: true
@@ -486,12 +514,12 @@
     that:
       - >-
         nginx_auth_request_record.auth_request is not defined or
-        ((nginx_auth_request_record.auth_request | type_debug) == 'str' and
+        (nginx_auth_request_record.auth_request is string and
         nginx_auth_request_record.auth_request is match(
          '^/[A-Za-z0-9._~!$&()*+,=:@%/?-]+$'))
       - >-
         nginx_auth_request_record.internal is not defined or
-        ((nginx_auth_request_record.internal | type_debug) == 'str' and
+        (nginx_auth_request_record.internal is string and
         nginx_auth_request_record.internal == '') or
         (nginx_auth_request_record.internal is boolean and
         nginx_auth_request_record.internal)
@@ -520,7 +548,7 @@
   ansible.builtin.assert:
     that:
       - nginx_location_record.redirect_to is defined
-      - (nginx_location_record.redirect_to | type_debug) == 'str'
+      - nginx_location_record.redirect_to is string
     fail_msg: "Proxy locations need a string redirect_to URL."
   loop: "{{ nginx_blueprint_locations }}"
   loop_control:
@@ -543,8 +571,8 @@
 - name: "Validate sensitive location directive values without logging them"
   ansible.builtin.assert:
     that:
-      - nginx_sensitive_location_record.auth_basic is not defined or (nginx_sensitive_location_record.auth_basic | type_debug) == 'str'
-      - nginx_sensitive_location_record.auth_basic_user_file is not defined or (nginx_sensitive_location_record.auth_basic_user_file | type_debug) == 'str'
+      - nginx_sensitive_location_record.auth_basic is not defined or nginx_sensitive_location_record.auth_basic is string
+      - nginx_sensitive_location_record.auth_basic_user_file is not defined or nginx_sensitive_location_record.auth_basic_user_file is string
     fail_msg: >-
       Locations need safe values; auth_request must be an absolute local URI
       without whitespace, a scheme, or Nginx syntax.

@@ -306,6 +306,67 @@
             public_path_file_rejected: true
             public_path_file_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
 
+    - name: "Accept controller files source and remote absolute file sources"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            files:
+              - path: "/var/tmp/nginx-controller-source.conf"
+                src: "{{ role_path }}/files/nginx-relative-source.conf"
+              - path: "/var/tmp/nginx-remote-source.conf"
+                src: "/var/tmp/nginx-source.conf"
+                remote_src: true
+            sites: []
+
+    - name: "Reject an absolute controller file source"
+      block:
+        - name: "Validate the absolute controller file source"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                files:
+                  - path: "/var/tmp/nginx-invalid-source.conf"
+                    src: "/var/tmp/nginx-source.conf"
+                sites: []
+        - name: "Record an unexpectedly accepted absolute controller source"
+          ansible.builtin.set_fact:
+            public_path_file_source_rejected: false
+            public_path_file_source_message: "Absolute controller file source was accepted."
+      rescue:
+        - name: "Record the absolute controller file source rejection"
+          ansible.builtin.set_fact:
+            public_path_file_source_rejected: true
+            public_path_file_source_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
+    - name: "Reject a traversal controller file source"
+      block:
+        - name: "Validate the traversal controller file source"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+          vars:
+            state: "validate"
+            iac_blueprint:
+              nginx:
+                files:
+                  - path: "/var/tmp/nginx-invalid-source.conf"
+                    src: "{{ role_path }}/files/../files/nginx-relative-source.conf"
+                sites: []
+        - name: "Record an unexpectedly accepted traversal controller source"
+          ansible.builtin.set_fact:
+            public_path_file_traversal_rejected: false
+            public_path_file_traversal_message: "Traversal controller file source was accepted."
+      rescue:
+        - name: "Record the traversal controller file source rejection"
+          ansible.builtin.set_fact:
+            public_path_file_traversal_rejected: true
+            public_path_file_traversal_message: "{{ ansible_failed_result | default({}) | to_nice_json }}"
+
     - name: "Reject an unsafe public bind source path"
       block:
         - name: "Validate the unsafe public bind source path"
@@ -367,8 +428,15 @@
           - public_path_file_rejected
           - >-
             (((public_path_file_message)
-            | regex_search("File records need a safe absolute non-root path without traversal or unsafe parent scope, string content, and an octal mode."))
+            | regex_search("File records need a safe absolute non-root destination, exactly one valid " ~
+              "content or source payload, a controller source under role files or an absolute remote source, and an octal mode."))
             | default("", true) | length) > 0
+
+    - name: "Verify unsafe controller file sources were rescued"
+      ansible.builtin.assert:
+        that:
+          - public_path_file_source_rejected
+          - public_path_file_traversal_rejected
 
     - name: "Verify unsafe public bind source path was rescued"
       ansible.builtin.assert:

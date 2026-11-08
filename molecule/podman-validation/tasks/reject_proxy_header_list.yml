@@ -25,3 +25,4 @@
       ansible.builtin.assert:
         that:
           - ansible_failed_task.name == "Validate location records"
+        # Validate location records uses no_log, so its detailed assertion evidence is censored.

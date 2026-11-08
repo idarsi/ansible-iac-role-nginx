@@ -1,5 +1,5 @@
 > **Maturity State: Beta**<br>
-> **RC Readiness: 81%**
+> **RC Readiness: 94%**
 
 ANSIBLE-IAC-ROLE-NGINX
 ======================
