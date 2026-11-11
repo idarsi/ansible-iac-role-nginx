@@ -1,0 +1,24 @@
+---
+servers:
+  hosts:
+    web.example.org:
+  vars:
+    iac_blueprint:
+      nginx:
+        sites:
+          - name: "example.org"
+            autoconfigure: "website"
+            ssl_certificate_type: "selfsigned"
+          - name: "app.example.org"
+            autoconfigure: "proxy"
+            ssl_certificate_type: "selfsigned"
+            proxy_pass: "http://127.0.0.1:3000"
+            locations:
+              - path: "/api"
+                autoconfigure: "proxy"
+                redirect_to: "http://127.0.0.1:3000/api"
+        directories:
+          - path: "/srv/nginx-cache"
+            owner: "nginx"
+            group: "nginx"
+            mode: "0750"
