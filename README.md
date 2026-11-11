@@ -1,12 +1,15 @@
 > **Maturity State: Beta**<br>
 > **RC Readiness: 94%**
 
+See the executable [inventory example](docs/inventory-example.yml) and
+[playbook example](docs/playbook-example.yml) for a minimal installation.
+
 ANSIBLE-IAC-ROLE-NGINX
 ======================
-**COPYRIGHT** 2026 Idarsi collective
+**COPYRIGHT** 2026 ^(ida|arsi)$ collective
 **LICENSE** MIT License [LICENSE](LICENSE)
 **AUTHORS**
-- Idarsi collective
+- Arsi Atomi <arsi@porkkana.org>
 
 Overview
 --------
