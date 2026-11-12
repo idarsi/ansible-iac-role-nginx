@@ -111,7 +111,7 @@ or collections:
 ```bash
 export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
 ansible-playbook --syntax-check -i localhost, -c local molecule/podman-validation/converge.yml
-ansible-lint --profile production
+ANSIBLE_ROLES_PATH=.. ansible-lint --profile production
 molecule test -s podman-validation
 molecule test -s podman-guardrails
 molecule test -s podman-lifecycle

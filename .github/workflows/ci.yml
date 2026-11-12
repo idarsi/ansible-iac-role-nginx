@@ -28,7 +28,7 @@ jobs:
       - name: "Syntax check"
         run: "ansible-playbook --syntax-check -i localhost, -c local molecule/podman-validation/converge.yml"
       - name: "Lint"
-        run: "ansible-lint --profile production"
+        run: "ANSIBLE_ROLES_PATH=.. ansible-lint --profile production"
       - name: "Validation scenario"
         run: "molecule test -s podman-validation"
       - name: "Guardrail scenario"
