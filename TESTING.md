@@ -93,6 +93,11 @@ scenario; the suite does not infer restorecon coverage from
 
 ## Commands
 
+CI parses the documentation inventory example with `ansible-inventory` and
+syntax-checks the documentation playbook example with `ANSIBLE_ROLES_PATH=..`
+so it resolves this checkout as the role.
+These checks validate the examples without connecting to or changing a host.
+
 CI installs the pinned `containers.podman` collection from the repository
 root `requirements.yml` after installing the Python test tools. This collection
 provides the `containers.podman.podman_login` and
