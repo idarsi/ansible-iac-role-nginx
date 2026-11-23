@@ -1,0 +1,55 @@
+# Maturity reassessment
+
+**Maturity: Beta. RC readiness: 66% (66.5/100, rounded down).**
+
+This independent evidence-based reassessment covers base revision
+`50483665786006730a75993c44003d65cada965a`. The optional managed Molecule
+integration has no runtime acceptance yet and receives no additional credit.
+The revised score is not evidence that the new tests failed or caused a
+regression.
+
+## Scorecard
+
+| Category | Criterion scores | Subtotal |
+|---|---|---|
+| Scope | Purpose 3/3; inputs 2.5/5; support 2/4 | 7.5/12 |
+| Functionality | Core 8/8; lifecycle 3/6; platforms 1.5/3; rerun 1.5/3 | 14/20 |
+| Safety | Preflight 3/6; secure defaults 6/6; destructive safety 2.5/5; check mode 3/3 | 14.5/20 |
+| Convergence | Idempotence 5/5; transitions 2/4; recovery 2/4 | 9/13 |
+| Tests | Static 3/3; validation 2/4; functional 3/6; idempotence 4/4; lifecycle 2/4; matrix 1.5/3; CI enforcement 0/1 | 15.5/25 |
+| Documentation | Operator 2/4; testing 1/2; contribution 2/2; metadata 1/2 | 6/10 |
+| **Total** | | **66.5/100** |
+
+## Evidence and limitations
+
+The exact-base scheduled CI run
+[`44898161095`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/44898161095)
+on 2026-11-21 passed syntax, lint and the six existing Podman scenarios,
+including the Rocky Linux 9/10 platform matrix. The branch has no protection or
+rulesets requiring these checks, so configured CI is not enforced merge policy.
+
+RHEL 9/10 and SELinux runtime acceptance, bind/cron lifecycle and recovery
+coverage remain gaps. These gaps and the pre-existing discrepancies below
+retain the Beta cap:
+
+- The README bind example targeting `/var/cache/nginx` conflicts with the
+  canonical-path descendants guard.
+- Inline-only file-content documentation contradicts accepted source-only
+  implementation.
+- The guardrails claim of opt-in configuration cleanup is not demonstrated:
+  its fixture never sets `nginx_uninstall_remove_config: true`.
+- Manifest cleanup deletion lists have insufficient scope, traversal and
+  canonical-path checks.
+- Optional-field preflight validation is incomplete.
+
+These are pre-existing assessment findings, not changes introduced or fixed by
+the managed-test task. This assessment is not a full security audit and does
+not demonstrate a High-severity exploit.
+
+## Historical summary
+
+The previous README reported **Beta / 94%** with an incomplete scorecard,
+associated with commit `6723d2b` and older assessed ref
+`6fb36d595090873a6ebf375b43e8700d62c5073e`. That value is retained here as
+historical context, not current acceptance. The present score uses the explicit
+criterion scores and evidence above.

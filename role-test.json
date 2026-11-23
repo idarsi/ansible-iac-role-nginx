@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "scenarios": {
+    "podman-blueprint-validation": {
+      "title": "Pure blueprint validation",
+      "description": "Nonprivileged validation and nonmutation only; no Nginx installation or service coverage.",
+      "execution": {"backend": "podman"},
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-blueprint-validation-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-blueprint-validation-rocky9"]}
+      }
+    },
+    "podman-validation": {
+      "title": "Legacy validation regressions",
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-validation-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-validation-rocky9"]}
+      }
+    },
+    "podman-check-mode": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-check_mode-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-check_mode-rocky9"]}
+      }
+    },
+    "podman-functional": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-functional-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-functional-rocky9"]}
+      }
+    },
+    "podman-guardrails": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-guardrails-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-guardrails-rocky9"]}
+      }
+    },
+    "podman-lifecycle": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-lifecycle-rocky9"]},
+        "ansible-next": {"platforms": ["nginx-lifecycle-rocky9"]}
+      }
+    },
+    "podman-platform-matrix": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-platform-matrix-rocky9", "nginx-platform-matrix-rocky10"]},
+        "ansible-next": {"platforms": ["nginx-platform-matrix-rocky9", "nginx-platform-matrix-rocky10"]}
+      }
+    },
+    "kvm-selinux": {
+      "environments": {
+        "ansible-min": {"unsupported_reason": "The minimum controller lane is outside this integration's declared test scope; compatibility is not assessed."},
+        "ansible-current": {"platforms": ["nginx-selinux-kvm-rocky10"]},
+        "ansible-next": {"platforms": ["nginx-selinux-kvm-rocky10"]}
+      }
+    }
+  }
+}

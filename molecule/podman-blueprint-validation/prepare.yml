@@ -1,0 +1,27 @@
+---
+###############################################################################
+#
+# prepare.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Prepare validation-only fixtures"
+  hosts: "all"
+  gather_facts: false
+  tasks:
+    - name: "Create an unrelated sentinel"
+      ansible.builtin.copy:
+        content: "Preserve this validation fixture.\n"
+        dest: "/var/tmp/nginx-blueprint-validation-sentinel"
+        mode: "0640"
+
+    - name: "Observe the initial package and filesystem state"
+      ansible.builtin.include_tasks: "tasks/snapshot.yml"
+
+    - name: "Persist the baseline outside role-owned paths"
+      ansible.builtin.copy:
+        content: "{{ blueprint_snapshot | to_nice_json }}"
+        dest: "/var/tmp/nginx-blueprint-validation-baseline.json"
+        mode: "0600"

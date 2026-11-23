@@ -1,5 +1,10 @@
-> **Maturity State: Beta**<br>
-> **RC Readiness: 94%**
+> **Maturity State: Beta**
+>
+> **RC Readiness: 66%**
+
+See the [evidence-based maturity reassessment](docs/maturity-assessment.md).
+The previous 94% summary is historical, not the current score; this reassessment
+is not a regression caused by the optional managed-test integration.
 
 See the executable [inventory example](docs/inventory-example.yml) and
 [playbook example](docs/playbook-example.yml) for a minimal installation.
@@ -286,3 +291,9 @@ git clone --recurse-submodules https://github.com/idarsi/ansible-iac-role-nginx.
 See [TESTING.md](TESTING.md) for the tested matrix, observable lifecycle
 checks, and commands. See [CONTRIBUTING.md](CONTRIBUTING.md) for development
 workflow.
+
+All scenarios remain directly executable with Molecule. Optional TUI-managed
+execution is declared only for `podman-blueprint-validation`, a nonprivileged,
+validation-only scenario. Its metadata declares test intent, not a verified
+runtime pass or Nginx service coverage; the seven existing scenarios retain
+their standalone lifecycle.

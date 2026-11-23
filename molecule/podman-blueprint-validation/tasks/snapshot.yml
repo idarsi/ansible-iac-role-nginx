@@ -1,0 +1,39 @@
+---
+###############################################################################
+#
+# snapshot.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Read the installed package inventory without package management"
+  ansible.builtin.command:
+    argv: ["rpm", "-qa", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n"]
+  register: blueprint_packages
+  changed_when: false
+
+- name: "Observe role-owned paths and the unrelated sentinel"
+  ansible.builtin.stat:
+    path: "{{ blueprint_path }}"
+    checksum_algorithm: "sha256"
+  loop:
+    - "/etc/nginx"
+    - "/etc/yum.repos.d/nginx.repo"
+    - "/var/lib/ansible-iac-role-nginx"
+    - "/var/log/nginx"
+    - "/var/www"
+    - "/root/ansible-report.log"
+    - "/var/tmp/nginx-blueprint-validation-sentinel"
+  loop_control:
+    loop_var: blueprint_path
+  register: blueprint_paths
+
+- name: "Build a stable snapshot excluding access timestamps"
+  ansible.builtin.set_fact:
+    blueprint_snapshot:
+      packages: "{{ blueprint_packages.stdout_lines | sort }}"
+      paths: >-
+        {{ blueprint_paths.results | map(attribute='stat') |
+        map('dict2items') | map('rejectattr', 'key', 'in', ['atime', 'mtime', 'ctime']) |
+        map('list') | map('items2dict') | list }}

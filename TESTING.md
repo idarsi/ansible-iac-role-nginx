@@ -4,6 +4,7 @@
 
 | Platform/image | Ansible or application versions | Molecule scenarios | Main coverage |
 |---|---|---|---|
+| Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`, `sleep infinity`, nonprivileged) | Shared `ansible-current` / `ansible-next` intent; runtime pending | `podman-blueprint-validation` (manual, optional managed) | Pure blueprint validation, exact rejection errors, package/path/sentinel preservation, default Molecule idempotence |
 | Rocky Linux 9 (`quay.io/rockylinux/rockylinux:9`) | ansible-core 2.21.3; nginx stable | `podman-validation` | Validation and no-mutation contract |
 | Rocky Linux 9 UBI init (`docker.io/rockylinux/rockylinux:9-ubi-init`) | ansible-core 2.21.3; nginx stable | `podman-guardrails`, `podman-lifecycle`, `podman-check-mode`, `podman-functional` | Ownership safety, all public transitions, check-mode safety, TLS/redirect behavior, repository defaults, and idempotence |
 | Rocky Linux 9 and 10 UBI init (`docker.io/rockylinux/rockylinux:{9,10}-ubi-init`) | ansible-core 2.21.3; nginx stable | `podman-platform-matrix` | Baseline installation, `nginx -t`, enabled site, service behavior, and idempotence |
@@ -14,6 +15,16 @@ Rocky Linux 9 and 10 are automatically tested by the scheduled
 automatically covered here.
 
 ## Scenario coverage
+
+* `podman-blueprint-validation` accepts minimal, website and proxy blueprints in
+  `state: "validate"` and rejects representative root/collection types, unsafe
+  names, duplicate sites and unsafe directory paths with exact messages. Only
+  `prepare` writes fixtures and the baseline. Converge and its default Molecule
+  idempotence repeat perform validation only; verify compares installed RPMs,
+  role-owned path metadata and sentinel checksum/permissions with that baseline.
+  It requires no systemd, package installation, service startup or port exposure.
+  It does not replace the broader legacy validation regressions or establish
+  Nginx runtime/service coverage. New runtime acceptance is pending.
 
 * `podman-validation` checks valid input, invalid site/TLS/repository paths, duplicate
   and reserved server-level locations, supported states, and validation-only preservation of the
@@ -105,11 +116,15 @@ provides the `containers.podman.podman_login` and
 Version 1.20.2 supports the repository's pinned ansible-core 2.21.3 (and is
 also available in the shared verification environment).
 
-Use the shared environment for local checks, without installing dependencies
-or collections:
+Use an existing pinned shared environment for local checks. Set the checkout
+path for your installation; do not create a role-local venv or install/upgrade
+shared Python dependencies. Initialize the documented `tasks/shared` submodule.
+The current shared lane is Core 2.20.8, not the historical CI pin 2.21.3 above.
+Report missing or incompatible tooling instead of changing the environment.
 
 ```bash
-export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
+export IDARSI_TEST_ENVIRONMENT="/path/to/idarsi-ansible-test-environments"
+source "$IDARSI_TEST_ENVIRONMENT/.venv/ansible-current/bin/activate"
 ansible-playbook --syntax-check -i localhost, -c local molecule/podman-validation/converge.yml
 ANSIBLE_ROLES_PATH=.. ansible-lint --profile production
 molecule test -s podman-validation
@@ -126,8 +141,8 @@ virtualization, `/dev/kvm`, libvirt access, and its Rocky 10 install source are
 required), activate the shared Ansible environment, then run:
 
 ```bash
-export PATH="$HOME/.local/share/venvs/idarsi-ansible-testing/bin:$PATH"
-export IDARSI_TEST_ENVIRONMENT="$HOME/src/idarsi-ansible-test-environments"
+export IDARSI_TEST_ENVIRONMENT="/path/to/idarsi-ansible-test-environments"
+source "$IDARSI_TEST_ENVIRONMENT/.venv/ansible-current/bin/activate"
 export IDARSI_TEST_KVM_INSTALL_SOURCE_ROCKY10="<Rocky 10 ISO or install-tree path>"
 molecule test -s kvm-selinux
 ```
@@ -143,7 +158,8 @@ When running Molecule in a clean environment, install the declared Ansible
 collection before the scenarios:
 
 ```bash
-ansible-galaxy collection install --requirements-file requirements.yml
+ansible-galaxy collection install --requirements-file requirements.yml \
+  --collections-path /path/to/resolved/context/collections
 ```
 
 Pull requests run syntax, production-profile lint, validation, guardrails,
@@ -161,3 +177,140 @@ the maintained Rocky 9/10 image tags. Updating a digest on every image
 refresh would make the matrix stale without providing a durable platform
 contract; image tags and scenario results are therefore the maintained
 boundary.
+
+## Optional managed execution and standalone lifecycle
+
+Root `role-test.json` covers all eight scenarios and all three controller lanes.
+Only `podman-blueprint-validation` declares `execution.backend: "podman"`.
+The five privileged/systemd Podman scenarios remain exclusive legacy tests,
+as do `kvm-selinux` and `podman-validation`. The latter has a custom sequence
+without idempotence and broader package/check-mode fixtures; it is not relabeled
+as managed. Current and next entries declare test intent, not passing evidence;
+next is a forward-compatibility probe. The minimum lane is outside this
+integration's scope, not known incompatible or a new role minimum. Target OS
+support is unchanged. Avoid branch-bulk selection when only managed work is wanted.
+
+Use the shared helper from
+[`cc777691026cf300089b8d53760555987c62ce7f`](https://github.com/idarsi/idarsi-ansible-test-environments/tree/cc777691026cf300089b8d53760555987c62ce7f)
+or a separately reviewed compatible revision supporting
+`idarsi.scenario-context/v1` and both `direct` and `supervised` lifecycle modes.
+The immutable committed example and managed playbooks at that revision are the
+integration baseline, not unrelated uncommitted helper recovery work.
+See its [isolated-runs contract](https://github.com/idarsi/idarsi-ansible-test-environments/blob/cc777691026cf300089b8d53760555987c62ce7f/docs/isolated-test-runs.md)
+and the optional TUI checkout's `MANAGED_ROLE_GUIDE.md` and `METADATA.md`.
+Local execution against a dirty helper checkout must be recorded as dirty-helper
+evidence, never acceptance of the pristine pinned revision.
+
+The image supplies Python; it runs `sleep infinity`, not systemd. Shared helpers
+require Linux procfs, flock, pidfds, `ip`, local **rootless Podman and successful
+local `qemu:///system` libvirt discovery**, even for this Podman-only scenario.
+No privileged containers, host mounts/namespaces, extra capabilities or published
+ports are requested. Missing prerequisites block execution; this integration
+does not authorize host installation, privilege changes or service reconfiguration.
+Role-specific collections belong in `requirements.yml`, not the shared venv.
+For dependency bootstrap, use `scenario-context resolve`'s
+`collections_directory`, preserving the scenario's exact safe-files glob.
+
+From the role root, after activating the shared environment as above:
+
+```bash
+"$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" capabilities \
+  --backend podman --scenario podman-blueprint-validation --role "$PWD"
+"$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" resolve \
+  --backend podman --scenario podman-blueprint-validation --role "$PWD"
+molecule test -s podman-blueprint-validation
+```
+
+Direct Molecule remains independent of the TUI or supervisor. To retain a
+container and execute phases separately (including the prepare-only fixtures):
+
+```bash
+molecule create -s podman-blueprint-validation &&
+molecule prepare -s podman-blueprint-validation &&
+molecule converge -s podman-blueprint-validation &&
+molecule idempotence -s podman-blueprint-validation &&
+molecule verify -s podman-blueprint-validation &&
+molecule destroy -s podman-blueprint-validation
+```
+
+Direct same-context concurrency is unsupported. The shared helper owns direct
+identities and optional supervised UUID/ephemeral/collections isolation.
+Invalid or partial `IDARSI_RUN_ID`/`IDARSI_HANDOFF*` context must fail closed
+before mutation, never fall back to direct. Do not manufacture handoff values.
+
+Use the existing TUI environment and suffix selector `--role nginx`, not the
+repository name. Planning is read-only and not backend readiness evidence:
+
+```bash
+export ROLES_DIR="/path/to/roles"
+idarsi-tests-run list --role nginx --roles-dir "$ROLES_DIR" \
+  --environment-repository "$IDARSI_TEST_ENVIRONMENT"
+idarsi-tests-run plan --role nginx --roles-dir "$ROLES_DIR" \
+  --environment-repository "$IDARSI_TEST_ENVIRONMENT" \
+  --cell podman-blueprint-validation whole_scenario 'whole scenario' ansible-current
+idarsi-tests-run run --role nginx --roles-dir "$ROLES_DIR" \
+  --environment-repository "$IDARSI_TEST_ENVIRONMENT" \
+  --cell podman-blueprint-validation whole_scenario 'whole scenario' ansible-current \
+  --expect-sha FULL_APPROVED_COMMIT_SHA --yes
+```
+
+Replace the SHA with the exact committed ref approved by plan; add `--branch`
+consistently for another local branch. GUI execution requires explicitly
+selecting that cell, previewing and confirming it; preview is not execution
+evidence. Record actual worker output, tested SHA/dirty qualification, helper
+revision, controller lane, origin (`cli` versus `tui_gui`) and authoritative
+cleanup separately. Only original-context `test-run inspect UUID` reporting
+`cleaned` proves cleanup, not worker exit or a missing guest name. Follow the
+shared recovery contract on uncertainty; never purge journals/resources or
+force-unlock retained admission.
+
+No new managed scenario is added to CI: the existing workflow does not provision
+or pin both shared discovery prerequisites. Developer parse/contract/syntax
+checks are not direct, retained-phase, supervised CLI, actual GUI, next-lane,
+invalid-handoff, concurrency, interruption or cleanup runtime acceptance.
+Those checks remain tester/operator responsibilities; all new runtime results
+are **pending**, not passes.
+
+### Tester preflight evidence
+
+The tester checked `update/optional-managed-molecule` at base
+`50483665786006730a75993c44003d65cada965a` with dirty, uncommitted role changes,
+helper `cc777691026cf300089b8d53760555987c62ce7f` with tracked/untracked recovery
+changes, and clean TUI `1bbd987759ceeb779db85ee2dde1588756eaa119`.
+This is not pristine pinned-helper acceptance.
+
+From the role root with the existing shared `ansible-current` environment
+activated, these read-only checks exited **0**:
+
+```bash
+"$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" capabilities \
+  --backend podman --scenario podman-blueprint-validation --role "$PWD"
+"$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" resolve \
+  --backend podman --scenario podman-blueprint-validation --role "$PWD"
+PYTHONPATH="$IDARSI_TEST_ENVIRONMENT/scripts" python -B -c \
+  'from isolated_runs.discovery import discover; networks=discover(); print("PASS:",len(networks))'
+```
+
+Capabilities/resolve reported direct and supervised modes with
+`generation: null`; strict backend discovery returned 44 prefixes. In the existing TUI
+environment, from its checkout, the first two commands below exited **0** and selected
+the intended whole-scenario current cell. Planning reported
+`runtime_preflight_completed: false`.
+
+```bash
+python -m automation_cli list --role nginx --roles-dir "$ROLES_DIR" \
+  --environment-repository "$IDARSI_TEST_ENVIRONMENT"
+python -m automation_cli plan --role nginx --roles-dir "$ROLES_DIR" \
+  --environment-repository "$IDARSI_TEST_ENVIRONMENT" \
+  --cell podman-blueprint-validation whole_scenario 'whole scenario' ansible-current
+python -m automation_cli admission inspect --json
+```
+
+The last command exited **3**, reporting `blocked: true` and
+`Admission busy or unsafe/missing state`. Unrelated generations were
+running/cleaning/cleanup_failed. No bypass or allocation was attempted; final
+scenario-context inspection still reported `generation: null`. Direct and
+retained lifecycle, idempotence, invalid-handoff rejection, supervised CLI,
+actual GUI and next-lane acceptance remain **blocked/unproven**, not role-test
+failures. No new generation was created and no cleanup was performed or claimed
+for unrelated resources.

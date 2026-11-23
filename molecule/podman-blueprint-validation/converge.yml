@@ -1,0 +1,60 @@
+---
+###############################################################################
+#
+# converge.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Exercise pure Nginx blueprint validation"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Accept minimal, website and proxy blueprints without host changes"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx: "{{ blueprint_valid }}"
+      loop:
+        - {}
+        - sites:
+            - name: "example.org"
+              autoconfigure: "website"
+              ssl_certificate_type: "selfsigned"
+        - sites:
+            - name: "proxy.example.org"
+              autoconfigure: "proxy"
+              ssl_certificate_type: "none"
+              proxy_pass: "http://127.0.0.1:3000"
+              locations:
+                - path: "/health"
+                  internal: true
+      loop_control:
+        loop_var: blueprint_valid
+
+    - name: "Reject representative invalid contracts with exact errors"
+      ansible.builtin.include_tasks: "tasks/reject.yml"
+      loop:
+        - blueprint: "not-a-mapping"
+          message: "iac_blueprint.nginx must be a mapping."
+        - blueprint:
+            sites: "not-a-list"
+          message: "iac_blueprint.nginx.sites must be a list, not a string or another scalar; got str."
+        - blueprint:
+            sites:
+              - name: ".."
+          message: "Site records require safe names and supported boolean proxy_ssl_verify settings."
+        - blueprint:
+            sites:
+              - name: "duplicate.example.org"
+              - name: "duplicate.example.org"
+          message: "Nginx site names must be unique."
+        - blueprint:
+            directories:
+              - path: "/etc"
+          message: "Directory records need a safe absolute non-root path without traversal or unsafe parent scope, and an octal mode."
+      loop_control:
+        loop_var: blueprint_invalid
