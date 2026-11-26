@@ -27,9 +27,11 @@ Support and security defaults
 -----------------------------
 
 The supported platforms are Rocky Linux 9/10 and Red Hat Enterprise Linux
-9/10. Rocky Linux 9 and 10 are tested in the scheduled platform matrix; the
-pull-request functional matrix uses Rocky Linux 9. RHEL is supported but is
-not automatically covered by this repository's Molecule matrix. See
+9/10. Historical Podman CI covered Rocky Linux 9/10; the renamed managed KVM
+matrix is source-reviewed only and awaits runtime acceptance. Current CI
+configures two Rocky Linux 9 validation scenarios; full host/service coverage
+requires a provisioned KVM runner and remains manual/pending. RHEL is supported
+but is not automatically covered by this repository's Molecule matrix. See
 [TESTING.md](TESTING.md).
 
 Nginx uses the HTTPS `nginx-stable` repository by default; override its section
@@ -292,8 +294,11 @@ See [TESTING.md](TESTING.md) for the tested matrix, observable lifecycle
 checks, and commands. See [CONTRIBUTING.md](CONTRIBUTING.md) for development
 workflow.
 
-All scenarios remain directly executable with Molecule. Optional TUI-managed
-execution is declared only for `podman-blueprint-validation`, a nonprivileged,
-validation-only scenario. Its metadata declares test intent, not a verified
-runtime pass or Nginx service coverage; the seven existing scenarios retain
-their standalone lifecycle.
+All eight scenarios support ordinary direct Molecule execution and declare
+optional TUI-managed whole-scenario execution: two nonprivileged Rocky Linux 9
+Podman validation scenarios and six KVM scenarios, including the complete
+Rocky Linux 9/10 matrix. See `TESTING.md` for exact IDs and prerequisites.
+The migration working tree is source-reviewed only; no runtime tests were run
+at the user's request. Historical evidence retains its original SHA and IDs
+and does not transfer to renamed or migrated scenarios. The Beta / 66% maturity
+score is unchanged; metadata is test intent, not runtime acceptance.

@@ -1,4 +1,11 @@
 ---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Run validation regressions outside stable convergence"
+  ansible.builtin.import_playbook: "regressions.yml"
+
 - name: "Verify validation did not mutate role-managed state"
   hosts: "all"
   gather_facts: false

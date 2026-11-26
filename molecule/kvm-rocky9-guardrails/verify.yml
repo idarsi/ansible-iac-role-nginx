@@ -1,6 +1,14 @@
 ---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Run destructive guardrail regressions after stable convergence"
+  ansible.builtin.import_playbook: "regressions.yml"
+
 - name: "Verify persisted guardrail results"
   hosts: "all"
+  become: true
   gather_facts: false
   tasks:
     - name: "Read the converge result"

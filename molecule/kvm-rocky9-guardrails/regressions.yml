@@ -1,6 +1,11 @@
 ---
+###############################################################################
+# regressions.yml
+# @author Arsi Atomi
+###############################################################################
 - name: "Verify uninstall confirmation guardrail"
   hosts: "all"
+  become: true
   gather_facts: true
   tasks:
     - name: "Create an external repository fixture"

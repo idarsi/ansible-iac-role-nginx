@@ -1,0 +1,38 @@
+---
+###############################################################################
+#
+# prepare.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Prepare SELinux for the disposable lifecycle listener"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Require the lifecycle guest to retain enforcing SELinux"
+      ansible.builtin.assert:
+        that:
+          - "ansible_facts.selinux.status == 'enabled'"
+          - "ansible_facts.selinux.mode == 'enforcing'"
+
+    - name: "Install Rocky SELinux policy and Python module prerequisites"
+      ansible.builtin.dnf:
+        name:
+          - "selinux-policy-targeted"
+          - "policycoreutils-python-utils"
+          - "python3-libselinux"
+          - "python3-libsemanage"
+        state: "present"
+
+    # seport modifies an existing alternate type instead of blindly adding it.
+    - name: "Persist and load the guest-only HTTP listener port type"
+      community.general.seport:
+        ports:
+          - "8080"
+        proto: "tcp"
+        setype: "http_port_t"
+        state: "present"
+        reload: true

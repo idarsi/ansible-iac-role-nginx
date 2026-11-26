@@ -1,13 +1,18 @@
 ---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
 - name: "Verify check mode does not mutate managed state"
   hosts: "all"
+  become: true
   gather_facts: true
   vars:
     check_mode_blueprint:
       nginx:
         files:
           - path: "/etc/nginx/check-mode-ca.crt"
-            content: "{{ lookup('file', playbook_dir ~ '/../podman-functional/files/test-ca.crt') }}\n"
+            content: "{{ lookup('file', playbook_dir ~ '/../kvm-rocky9-functional/files/test-ca.crt') }}\n"
             mode: "0644"
           - path: "/var/tmp/nginx-check-mode-secret.conf"
             content: "TEST_ONLY_SECRET_MUST_NOT_APPEAR_IN_DIFF"

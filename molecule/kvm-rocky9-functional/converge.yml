@@ -1,6 +1,11 @@
 ---
+###############################################################################
+# converge.yml
+# @author Arsi Atomi
+###############################################################################
 - name: "Converge the functional HTTPS fixture"
   hosts: "all"
+  become: true
   gather_facts: true
   tasks:
     - name: "Start a test-only local HTTP backend"

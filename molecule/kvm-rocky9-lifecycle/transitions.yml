@@ -1,6 +1,14 @@
 ---
+###############################################################################
+# transitions.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Prepare policy before independently invoked lifecycle transitions"
+  ansible.builtin.import_playbook: "prepare.yml"
+
 - name: "Converge the stable Nginx lifecycle baseline"
   hosts: "all"
+  become: true
   gather_facts: true
   vars:
     lifecycle_blueprint:

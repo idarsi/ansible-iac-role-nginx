@@ -1,6 +1,11 @@
 ---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
 - name: "Verify Nginx configuration and local HTTP behavior"
   hosts: "all"
+  become: true
   gather_facts: true
   tasks:
     - name: "Fail fast if the test-only backend is unavailable"

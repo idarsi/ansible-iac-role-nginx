@@ -1,6 +1,11 @@
 ---
+###############################################################################
+# converge.yml
+# @author Arsi Atomi
+###############################################################################
 - name: "Converge the cross-platform Nginx baseline"
   hosts: "all"
+  become: true
   gather_facts: true
   tasks:
     - name: "Install Nginx with a plain HTTP site"

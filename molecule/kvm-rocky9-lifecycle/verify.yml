@@ -1,6 +1,14 @@
 ---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Verify handler and service transitions outside stable convergence"
+  ansible.builtin.import_playbook: "transitions.yml"
+
 - name: "Verify Nginx lifecycle state transitions"
   hosts: "all"
+  become: true
   gather_facts: true
   vars:
     lifecycle_blueprint:

@@ -2,9 +2,13 @@
 
 **Maturity: Beta. RC readiness: 66% (66.5/100, rounded down).**
 
-This independent evidence-based reassessment covers base revision
-`50483665786006730a75993c44003d65cada965a`. The optional managed Molecule
-integration has no runtime acceptance yet and receives no additional credit.
+This independent evidence-based reassessment retains the existing criterion
+scores for the pre-migration baseline
+`c2f1c3543eff2dca0c27785403de29791d7f4c86`. The working-tree migration on
+`update/optional-managed-molecule` is source-reviewed only. No runtime tests
+were run at the user's request. All eight renamed/migrated scenarios await
+runtime acceptance and receive no additional credit; historical results retain
+their original SHA and scenario IDs and do not transfer to this migration.
 The revised score is not evidence that the new tests failed or caused a
 regression.
 
@@ -22,11 +26,14 @@ regression.
 
 ## Evidence and limitations
 
-The exact-base scheduled CI run
+The historical scheduled CI run at
+`50483665786006730a75993c44003d65cada965a`,
 [`44898161095`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/44898161095)
 on 2026-11-21 passed syntax, lint and the six existing Podman scenarios,
-including the Rocky Linux 9/10 platform matrix. The branch has no protection or
-rulesets requiring these checks, so configured CI is not enforced merge policy.
+including the original `podman-platform-matrix` Rocky Linux 9/10 scenario.
+This is not a pass of the renamed managed KVM scenarios. The branch has no
+protection or rulesets requiring these checks, so configured CI is not enforced
+merge policy.
 
 RHEL 9/10 and SELinux runtime acceptance, bind/cron lifecycle and recovery
 coverage remain gaps. These gaps and the pre-existing discrepancies below
