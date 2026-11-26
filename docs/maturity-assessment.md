@@ -14,8 +14,8 @@ regression.
 
 ## Scorecard
 
-Focused PID reconciliation/stopped-fixture reassessment (2026-11-26): assessed ref is the
-uncommitted working tree after clean `cae9ff20770bf9ba0923432a5131f0f7ee24aa6d` on
+Focused PID reconciliation/preview-order reassessment (2026-11-26): assessed ref is the
+uncommitted working tree after clean `6075aa3` on
 `update/optional-managed-molecule`. The full criterion scorecard below is
 retained at **66.5/100 → 66%, Beta**. Shared validation, narrow active-policy
 PID relabeling, dry-run handling and additional enforcing-guest assertions
@@ -64,6 +64,18 @@ the Beta cap remain unchanged: **66.5/100 → 66%, Beta**.
 | Tests | Static 3/3; validation 2/4; functional 3/6; idempotence 4/4; lifecycle 2/4; matrix 1.5/3; CI enforcement 0/1 | 15.5/25 |
 | Documentation | Operator 2/4; testing 1/2; contribution 2/2; metadata 1/2 | 6/10 |
 | **Total** | | **66.5/100** |
+
+Campaign 345 (clean role `6075aa3`, helper `491320f`, Rocky 10 SELinux,
+current/next) passed the explicit stopped-service and active-policy assertions,
+then failed actual-repair change reporting after previews; exit 2 and cleanup
+`cleaned`. Enabled diagnostics returned `items: []`, not PID/AVC or success
+evidence. Native engine negative controls now reproduce preview role
+inclusions replacing real handlers with inherited-check-mode handlers on both
+controller lanes. The test-only correction directly includes production tasks
+for preview without handler re-registration; the complete preview/real-flush/
+idempotent-repeat sequence passes with mocked actions and forbidden transport.
+This confirms a fixture-order interaction, not a production SELinux diagnosis.
+No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 

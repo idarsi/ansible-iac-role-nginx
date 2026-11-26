@@ -163,7 +163,7 @@ class HandlerGraphTests(unittest.TestCase):
 
     def run_graph(self, *, notified=True, service="running", failure=False,
                   preview=False, pid=None, selinux="enabled", old_blocks=False,
-                  stopped_properties=None):
+                  stopped_properties=None, sequence=None):
         """Copy unmodified production inputs; only replace external actions."""
         temp_parent = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
         with tempfile.TemporaryDirectory(prefix="nginx-pid-", dir=temp_parent) as directory:
@@ -197,6 +197,68 @@ class HandlerGraphTests(unittest.TestCase):
                 [{"ansible.builtin.include_tasks": "tasks/nginx_config_test.yml"},
                  {"ansible.builtin.meta": "flush_handlers"}]
             )
+            if sequence is not None:
+                role = root / "roles/nginx"
+                role.mkdir(parents=True)
+                shutil.copytree(root / "tasks", role / "tasks")
+                shutil.copytree(root / "handlers", role / "handlers")
+                regression = yaml.safe_load((
+                    ROOT / "molecule/kvm-rocky9-lifecycle/tasks/pid_label_regression.yml"
+                ).read_text())
+                previews = [
+                    next(task for task in regression if task["name"] == name)
+                    for name in (
+                        "Preview PID label reconciliation without running nginx -t",
+                        "Preview PID repair using block-inherited check mode",
+                    )
+                ]
+
+                def bind_include(task):
+                    """Bind actual guest fixture includes to the copied role."""
+                    if "block" in task:
+                        for child in task["block"]:
+                            bind_include(child)
+                    elif "ansible.builtin.include_role" in task:
+                        task["ansible.builtin.include_role"]["name"] = str(role)
+                    elif "ansible.builtin.include_tasks" in task:
+                        task["ansible.builtin.include_tasks"]["file"] = str(
+                            role / "tasks/nginx_config_test.yml")
+
+                for task in previews:
+                    bind_include(task)
+                if sequence == "old":
+                    # Preserve the original fixture as an executable negative
+                    # control after the guest fixture is corrected.
+                    previews = [
+                        {"ansible.builtin.include_role": {
+                            "name": str(role), "tasks_from": "nginx_config_test.yml",
+                            "apply": {"check_mode": True}}},
+                        {"check_mode": True, "block": [
+                            {"ansible.builtin.include_role": {
+                                "name": str(role), "tasks_from": "nginx_config_test.yml"}}
+                        ]},
+                    ]
+                play_tasks = [
+                    {"ansible.builtin.set_fact": {
+                        "mock_phase": "registration"}},
+                    {"ansible.builtin.include_role": {
+                        "name": str(role), "tasks_from": "nginx_config_test.yml"}},
+                    {"ansible.builtin.set_fact": {
+                        "mock_phase": "preview"}},
+                    *previews,
+                    {"ansible.builtin.assert": {"that": [
+                        "not ansible_check_mode", "nginx_pid_restorecon.changed",
+                        "nginx_pid_relabel.skipped"]}},
+                    {"ansible.builtin.set_fact": {"mock_phase": "repair"}},
+                    *play_tasks,
+                    {"ansible.builtin.assert": {"that": [
+                        "nginx_pid_restorecon.changed", "nginx_pid_relabel.changed",
+                        "not nginx_pid_relabel.skipped | default(false)"]}},
+                    {"ansible.builtin.set_fact": {"mock_phase": "repeat"}},
+                    *play_tasks,
+                    {"ansible.builtin.assert": {"that": [
+                        "not nginx_pid_restorecon.changed"]}},
+                ]
             if stopped_properties is not None:
                 # Exercise the actual guest status/assertion tasks, never its
                 # mutating fixture setup, through the same isolated engine.
@@ -264,6 +326,31 @@ class HandlerGraphTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("systemd_service", [e["action"] for e in events])
         self.assertEqual(len([e for e in events if e["action"] == "command"]), 1)
+
+    def test_preview_then_real_handler_sequence(self):
+        result, events = self.run_graph(sequence="fixed", service="stopped")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = [event for event in events if event["action"] == "command"]
+        phases = {
+            phase: [event for event in commands if event.get("phase") == phase]
+            for phase in ("registration", "preview", "repair", "repeat")
+        }
+        self.assertEqual([e["check"] for e in phases["preview"]],
+                         [True, False, True] * 2)
+        self.assertTrue(all(not e["pid_correct"] for e in phases["preview"]))
+        self.assertEqual([e["check"] for e in phases["repair"]], [False] * 3)
+        self.assertEqual([e["check"] for e in phases["repeat"]], [False] * 2)
+        self.assertTrue(all(e["pid_correct"] for e in phases["repeat"]))
+        self.assertNotIn("systemd_service", [e["action"] for e in events])
+
+    def test_negative_control_preview_role_reregisters_checked_handlers(self):
+        result, events = self.run_graph(sequence="old", service="stopped")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        commands = [event for event in events if
+                    event["action"] == "command" and event.get("phase") == "repair"]
+        self.assertEqual([e["check"] for e in commands], [True, False, True])
+        self.assertTrue(all(not e["pid_correct"] for e in commands))
+        self.assertIn("nginx_pid_relabel.changed", result.stdout)
 
     def test_policy_gates_and_unsafe_objects(self):
         for pid, selinux, success in (

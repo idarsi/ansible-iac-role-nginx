@@ -2,6 +2,33 @@
 
 ## Focused PID-label regression update
 
+Campaign 345 at clean role `6075aa3` and clean helper `491320f` reached
+`kvm-rocky10-selinux` verification in current/next, exiting 2 with cleanup
+`cleaned`. The explicit stopped-service assertion and `matchpathcon -V` passed.
+After task/block preview passed, the real handler flush skipped `nginx -t`
+and actual restorecon, although the safe probe predicted a change; the
+`nginx_pid_relabel.changed` assertion then failed. Diagnostics were enabled,
+but `items: []` supplies neither PID/AVC evidence nor proof of service success.
+
+Native-engine reproduction confirms that preview `include_role` invocations
+re-register the role's handlers with inherited check mode in the same play.
+The later real notification therefore selects preview handlers. The fixture
+now directly includes the unchanged production validation task file for all
+previews, retaining task/block inheritance without replacing handlers. Normal
+role inclusions, real notification/flush order, changed assertions,
+`matchpathcon`, PID metadata and live-master assertions are unchanged. Both
+Rocky 9 lifecycle and Rocky 10 SELinux reuse this corrected fixture.
+
+The host-free regression exercises normal role-handler registration, actual
+fixture task preview, block preview, real notification/flush and a repeat.
+Synthetic PID context remains incorrect during both previews, changes only
+during real repair, and stays correct with no second predicted repair.
+A negative control retains the original preview role inclusions and requires
+the observed real-handler check flags (true/false/true for nginx/probe/repair)
+and changed-assertion failure. Both controls pass on current/next. This is
+native-engine/mock evidence only; corrected guest acceptance remains pending.
+Production tasks and effective check-mode inheritance are unchanged.
+
 Campaign 344 at clean role `cae9ff20770bf9ba0923432a5131f0f7ee24aa6d`
 reached `kvm-rocky10-selinux` verification in both current/next lanes after
 converge and idempotence passed. Both workers exited 2, with cleanup `cleaned`.

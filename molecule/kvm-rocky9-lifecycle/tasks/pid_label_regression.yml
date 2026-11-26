@@ -80,10 +80,12 @@
       loop_control:
         loop_var: pid_unsafe_fixture
 
+# Preview the production tasks without re-registering the role's handlers.
+# include_role under inherited check mode replaces later real handlers with
+# preview handlers in this play, causing nginx -t and actual repair to skip.
 - name: "Preview configuration validation while the PID file is absent"
-  ansible.builtin.include_role:
-    name: "{{ playbook_dir | dirname | dirname }}"
-    tasks_from: "nginx_config_test.yml"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
     apply:
       check_mode: true
 
@@ -170,9 +172,8 @@
   register: pid_mislabeled_before
 
 - name: "Preview PID label reconciliation without running nginx -t"
-  ansible.builtin.include_role:
-    name: "{{ playbook_dir | dirname | dirname }}"
-    tasks_from: "nginx_config_test.yml"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
     apply:
       check_mode: true
 
@@ -197,9 +198,8 @@
   check_mode: true
   block:
     - name: "Validate the mislabeled PID using the block check-mode context"
-      ansible.builtin.include_role:
-        name: "{{ playbook_dir | dirname | dirname }}"
-        tasks_from: "nginx_config_test.yml"
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
 
 - name: "Capture the PID fixture after block-inherited check mode"
   ansible.builtin.command: "stat -c %i:%s:%u:%g:%a:%C /run/nginx.pid"
@@ -282,9 +282,8 @@
       - not nginx_pid_restorecon.changed
 
 - name: "Preview running configuration validation and PID reconciliation"
-  ansible.builtin.include_role:
-    name: "{{ playbook_dir | dirname | dirname }}"
-    tasks_from: "nginx_config_test.yml"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
     apply:
       check_mode: true
 

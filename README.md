@@ -3,7 +3,7 @@
 > **RC Readiness: 66%**
 
 See the [evidence-based maturity reassessment](docs/maturity-assessment.md).
-The focused stopped-PID fixture assessment covers `cae9ff2` plus working-tree changes;
+The focused preview-order fixture assessment covers `6075aa3` plus working-tree changes;
 native-engine mocks are source-level evidence, not guest/runtime acceptance.
 The previous 94% summary is historical, not the current score; this reassessment
 is not a regression caused by the optional managed-test integration.
