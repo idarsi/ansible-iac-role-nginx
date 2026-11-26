@@ -1,7 +1,13 @@
-"""Source and mocked-module checks; no commands, guests or backends are run."""
+"""Native engine/module regressions with host actions and transport mocked."""
 
+import json
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -16,8 +22,7 @@ from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = yaml.safe_load((ROOT / "tasks/nginx_config_test.yml").read_text())
-POLICY_TASKS = TASKS[2]["block"][1]["block"]
-PROBE, REPAIR = POLICY_TASKS[-2:]
+PROBE, REPAIR = TASKS[-3:-1]
 ENV = Environment(undefined=StrictUndefined)
 ENV.tests["search"] = lambda text, pattern: re.search(pattern, text) is not None
 
@@ -148,9 +153,125 @@ class PidValidationTests(unittest.TestCase):
                     ENV.compile_expression(REPAIR["changed_when"])(**context),
                     actual,
                 )
-        self.assertEqual(REPAIR["when"], PROBE["changed_when"])
+        self.assertEqual(REPAIR["when"][-1], PROBE["changed_when"])
         self.assertEqual(PROBE["environment"]["LC_ALL"], "C")
         self.assertEqual(REPAIR["environment"]["LC_ALL"], "C")
+
+
+class HandlerGraphTests(unittest.TestCase):
+    """Actually expand notified production includes using Ansible's engine."""
+
+    def run_graph(self, *, notified=True, service="running", failure=False,
+                  preview=False, pid=None, selinux="enabled", old_blocks=False):
+        """Copy unmodified production inputs; only replace external actions."""
+        temp_parent = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
+        with tempfile.TemporaryDirectory(prefix="nginx-pid-", dir=temp_parent) as directory:
+            root = Path(directory)
+            (root / "tasks").mkdir()
+            (root / "handlers").mkdir()
+            for name in ("nginx_config_test.yml", "nginx_pid_guard.yml"):
+                shutil.copyfile(ROOT / "tasks" / name, root / "tasks" / name)
+            shutil.copyfile(ROOT / "handlers/main.yml", root / "handlers/main.yml")
+            if old_blocks:
+                # Negative control proves native handler expansion catches the
+                # original shape, not merely a source assertion about blocks.
+                tasks = yaml.safe_load((root / "tasks/nginx_config_test.yml").read_text())
+                tasks[2:-1] = [{"name": "Old nested handler blocks", "block": [
+                    {"block": tasks[2:-1]}
+                ]}]
+                (root / "tasks/nginx_config_test.yml").write_text(yaml.safe_dump(tasks))
+            for name in ("pid_engine.py", "pid_mock_action.py"):
+                shutil.copyfile(ROOT / "tests/fixtures" / name, root / name)
+            connections = root / "connection_plugins"
+            connections.mkdir()
+            shutil.copyfile(ROOT / "tests/fixtures/pid_no_connection.py",
+                            connections / "pid_no_connection.py")
+            audit = root / "audit.jsonl"
+            play_tasks = (
+                [{"name": "Notify production validation",
+                  "ansible.builtin.debug": {"msg": "synthetic configuration change"},
+                  "changed_when": True, "notify": "Validate Nginx configuration"},
+                 {"ansible.builtin.meta": "flush_handlers"}]
+                if notified else
+                [{"ansible.builtin.include_tasks": "tasks/nginx_config_test.yml"},
+                 {"ansible.builtin.meta": "flush_handlers"}]
+            )
+            play = [{
+                "name": "Host-free production handler graph",
+                "hosts": "fixture", "gather_facts": False,
+                "connection": "pid_no_connection",
+                "vars": {
+                    "ansible_facts": {
+                        "selinux": {"status": selinux},
+                        "services": {"nginx.service": {"state": service}},
+                    },
+                    "iac_service_name": "nginx", "nginx_state": "started",
+                    "mock_service": service, "mock_failure": failure,
+                    "mock_pid": pid if pid is not None else {
+                        "exists": True, "isreg": True, "islnk": False, "nlink": 1},
+                },
+                "handlers": [{"ansible.builtin.import_tasks": "handlers/main.yml"}],
+                "tasks": play_tasks,
+            }]
+            (root / "play.yml").write_text(yaml.safe_dump(play))
+            (root / "ansible.cfg").write_text(
+                "[defaults]\nconnection_plugins=./connection_plugins\n"
+                "retry_files_enabled=False\n")
+            env = {**os.environ, "ANSIBLE_CONFIG": str(root / "ansible.cfg"),
+                   "PID_MOCK_AUDIT": str(audit), "ANSIBLE_NOCOLOR": "1",
+                   "PYTHONDONTWRITEBYTECODE": "1"}
+            args = [sys.executable, "-B", "pid_engine.py",
+                    "-i", "fixture,", "play.yml"]
+            if preview:
+                args.append("--check")
+            result = subprocess.run(args, cwd=root, env=env, text=True,
+                                    capture_output=True, timeout=30, check=False)
+            events = [json.loads(line) for line in audit.read_text().splitlines()] \
+                if audit.exists() else []
+            return result, events
+
+    def test_actual_notify_and_shared_start_paths(self):
+        for notified, service, preview in (
+            (False, "running", False), (True, "running", False),
+            (True, "stopped", False), (True, "running", True),
+            (False, "running", True),
+        ):
+            with self.subTest(notified=notified, service=service, preview=preview):
+                result, events = self.run_graph(
+                    notified=notified, service=service, preview=preview)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                reloads = [e for e in events if e["action"] == "systemd_service"]
+                self.assertEqual(len(reloads), int(notified and service == "running"))
+                commands = [e for e in events if e["action"] == "command"]
+                self.assertEqual(len(commands), 3)
+                self.assertEqual([e["check"] for e in commands], [preview, False, preview])
+
+    def test_failure_does_not_reload(self):
+        result, events = self.run_graph(failure=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("systemd_service", [e["action"] for e in events])
+        self.assertEqual(len([e for e in events if e["action"] == "command"]), 1)
+
+    def test_policy_gates_and_unsafe_objects(self):
+        for pid, selinux, success in (
+            ({"exists": False}, "enabled", True),
+            (None, "disabled", True),
+            ({"exists": True, "isreg": True, "islnk": False, "nlink": 2}, "enabled", False),
+            ({"exists": True, "isreg": False, "islnk": True, "nlink": 1}, "enabled", False),
+            ({"exists": True, "isreg": False, "islnk": False, "nlink": 1}, "enabled", False),
+        ):
+            with self.subTest(pid=pid, selinux=selinux):
+                result, events = self.run_graph(pid=pid, selinux=selinux)
+                self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+                commands = [e for e in events if e["action"] == "command"]
+                self.assertEqual(len(commands), int(success))
+
+    def test_negative_control_rejects_original_nested_blocks(self):
+        result, events = self.run_graph(old_blocks=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Using a block as a handler is not supported",
+                      result.stdout + result.stderr)
+        self.assertNotIn("systemd_service", [e["action"] for e in events])
 
 
 if __name__ == "__main__":

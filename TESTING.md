@@ -2,6 +2,14 @@
 
 ## Focused PID-label regression update
 
+Campaign 342 at clean role `e7476e6` and helper `491320f` reached the
+notified validation handler but failed with `Using a block as a handler is not
+supported` (retained cells 2933–2943; worker exit 4, cleanup `cleaned`). The
+working-tree follow-up flattens both blocks in the shared validation include;
+each SELinux/existing-file gate remains on the applicable individual task.
+The earlier PID probe/repair succeeded before this handler-expansion failure.
+This is a handler-graph defect, not evidence that the PID repair failed.
+
 The working-tree fix after `ada402d` shares configuration validation between
 explicit `started` and the notified handler. After successful `nginx -t`, only
 an existing regular, non-symlink, single-link `/run/nginx.pid` is eligible for
@@ -40,6 +48,19 @@ normal-mode execution eligibility, exact changed-message recognition and an
 administrator-customized informational message with zero change. It does not
 prove effective guest policy, real restorecon output, service behavior or
 full role/handler runtime acceptance.
+
+The same command also runs the native Ansible playbook CLI engine in disposable
+fixtures using copied production handlers and shared validation/guard tasks.
+It actually notifies and flushes the handler graph, covering running/stopped
+reload gating, direct pre-start shared validation, failed validation without
+reload, CLI check mode, disabled SELinux, absent PID and unsafe PID objects.
+A negative control reinstates nested blocks and must fail with the original
+handler-expansion error. An allowlisted action-loader interception mocks
+command/stat/service facts/systemd; facts and results are synthetic,
+`gather_facts` is false, and a fail-closed connection plugin forbids command,
+upload, download and connection operations. Nothing calls host service,
+filesystem-stat modules, commands, guests or backends. This is mock/source-only
+evidence on current/next controllers, not a Molecule or service runtime pass.
 
 The existing enforcing `kvm-rocky9-lifecycle` and `kvm-rocky10-selinux` verifiers
 reuse `tasks/pid_label_regression.yml` from the lifecycle scenario. Intended

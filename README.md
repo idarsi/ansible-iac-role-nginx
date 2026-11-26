@@ -3,6 +3,8 @@
 > **RC Readiness: 66%**
 
 See the [evidence-based maturity reassessment](docs/maturity-assessment.md).
+The focused handler-graph assessment covers `e7476e6` plus working-tree changes;
+native-engine mocks are source-level evidence, not guest/runtime acceptance.
 The previous 94% summary is historical, not the current score; this reassessment
 is not a regression caused by the optional managed-test integration.
 

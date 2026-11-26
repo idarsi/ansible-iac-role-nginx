@@ -14,8 +14,8 @@ regression.
 
 ## Scorecard
 
-Focused PID reconciliation reassessment (2026-11-26): assessed ref is the
-uncommitted working tree after clean `ada402d` on
+Focused PID reconciliation/handler-graph reassessment (2026-11-26): assessed ref is the
+uncommitted working tree after clean `e7476e6` on
 `update/optional-managed-molecule`. The full criterion scorecard below is
 retained at **66.5/100 → 66%, Beta**. Shared validation, narrow active-policy
 PID relabeling, dry-run handling and additional enforcing-guest assertions
@@ -35,6 +35,15 @@ recognizes only exact relabel messages instead of arbitrary stdout.
 Targeted source/native-command mocks include administrator-customized labels
 and CLI-false inherited previews. These checks close source-level review
 findings but supply no guest-runtime evidence or criterion score increase.
+
+Campaign 342 reached notified validation and exposed the unsupported nested
+handler blocks after the PID repair had succeeded. The focused follow-up
+flattens both blocks without changing policy or service semantics. Native
+engine tests now actually notify/flush the copied production handler graph
+with mocked host actions and a forbidden transport, including a negative
+control that reproduces the original block error. These current/next
+source/mock checks do not establish guest acceptance. Beta / 66% and every
+criterion score remain unchanged; no runtime or production claim is added.
 
 | Category | Criterion scores | Subtotal |
 |---|---|---|
