@@ -162,7 +162,8 @@ class HandlerGraphTests(unittest.TestCase):
     """Actually expand notified production includes using Ansible's engine."""
 
     def run_graph(self, *, notified=True, service="running", failure=False,
-                  preview=False, pid=None, selinux="enabled", old_blocks=False):
+                  preview=False, pid=None, selinux="enabled", old_blocks=False,
+                  stopped_properties=None):
         """Copy unmodified production inputs; only replace external actions."""
         temp_parent = "/tmp/opencode" if Path("/tmp/opencode").is_dir() else None
         with tempfile.TemporaryDirectory(prefix="nginx-pid-", dir=temp_parent) as directory:
@@ -196,6 +197,17 @@ class HandlerGraphTests(unittest.TestCase):
                 [{"ansible.builtin.include_tasks": "tasks/nginx_config_test.yml"},
                  {"ansible.builtin.meta": "flush_handlers"}]
             )
+            if stopped_properties is not None:
+                # Exercise the actual guest status/assertion tasks, never its
+                # mutating fixture setup, through the same isolated engine.
+                regression = yaml.safe_load((
+                    ROOT / "molecule/kvm-rocky9-lifecycle/tasks/pid_label_regression.yml"
+                ).read_text())
+                start = next(
+                    index for index, task in enumerate(regression)
+                    if task["name"] == "Inspect the PID file created by stopped-service validation"
+                )
+                play_tasks += regression[start:start + 3]
             play = [{
                 "name": "Host-free production handler graph",
                 "hosts": "fixture", "gather_facts": False,
@@ -207,6 +219,7 @@ class HandlerGraphTests(unittest.TestCase):
                     },
                     "iac_service_name": "nginx", "nginx_state": "started",
                     "mock_service": service, "mock_failure": failure,
+                    "mock_systemd_properties": stopped_properties,
                     "mock_pid": pid if pid is not None else {
                         "exists": True, "isreg": True, "islnk": False, "nlink": 1},
                 },
@@ -272,6 +285,34 @@ class HandlerGraphTests(unittest.TestCase):
         self.assertIn("Using a block as a handler is not supported",
                       result.stdout + result.stderr)
         self.assertNotIn("systemd_service", [e["action"] for e in events])
+
+    def test_stopped_pid_fixture_uses_exact_systemd_properties(self):
+        pid = {"exists": True, "isreg": True, "islnk": False, "nlink": 1, "size": 0}
+        for service in ("stopped", "inactive"):
+            for properties, success in (
+                (["ActiveState=inactive", "SubState=dead"], True),
+                (["SubState=dead", "ActiveState=inactive"], True),
+                (["ActiveState=active", "SubState=running"], False),
+                (["ActiveState=failed", "SubState=failed"], False),
+                (["ActiveState=activating", "SubState=start"], False),
+                ([], False),
+                (["ActiveState=inactive"], False),
+                (["ActiveState inactive", "SubState=dead"], False),
+                (["ActiveState=inactive", "SubState=dead", "SubState=dead"], False),
+            ):
+                with self.subTest(service=service, properties=properties):
+                    result, events = self.run_graph(
+                        service=service, pid=pid, stopped_properties=properties)
+                    output = result.stdout + result.stderr
+                    self.assertEqual(result.returncode == 0, success, output)
+                    status = [event for event in events if
+                              event["args"].get("argv", [None])[0] == "/usr/bin/systemctl"]
+                    self.assertEqual(len(status), 1)
+                    self.assertFalse(status[0]["check"])
+                    if not success:
+                        self.assertIn("Actual systemd properties:", output)
+                        self.assertIn("PID metadata:", output)
+                        self.assertIn("SubState=dead", output)
 
 
 if __name__ == "__main__":

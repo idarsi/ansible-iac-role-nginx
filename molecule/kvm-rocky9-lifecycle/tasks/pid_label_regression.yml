@@ -128,17 +128,33 @@
 - name: "Inspect the PID file created by stopped-service validation"
   ansible.builtin.stat:
     path: "/run/nginx.pid"
+    follow: false
   register: pid_stopped_validation
 
 - name: "Read the service state after stopped-service validation"
-  ansible.builtin.service_facts:
+  ansible.builtin.command:
+    argv:
+      - "/usr/bin/systemctl"
+      - "show"
+      - "--property=ActiveState"
+      - "--property=SubState"
+      - "nginx.service"
+  changed_when: false
+  check_mode: false
+  register: pid_stopped_service
 
 - name: "Assert validation retained a stopped service and an empty regular PID file"
   ansible.builtin.assert:
     that:
-      - ansible_facts.services['nginx.service'].state == 'stopped'
-      - pid_stopped_validation.stat.isreg
-      - pid_stopped_validation.stat.size == 0
+      - pid_stopped_service.stdout_lines | default([]) | sort == ['ActiveState=inactive', 'SubState=dead']
+      - pid_stopped_validation.stat.isreg | default(false)
+      - not pid_stopped_validation.stat.islnk | default(false)
+      - pid_stopped_validation.stat.size | default(-1) == 0
+    fail_msg: >-
+      Expected nginx.service ActiveState=inactive and SubState=dead with an empty
+      regular, non-symlink /run/nginx.pid after stopped-service validation.
+      Actual systemd properties: {{ pid_stopped_service.stdout_lines | default([]) }};
+      PID metadata: {{ pid_stopped_validation.stat }}.
 
 - name: "Verify stopped-handler PID label against active policy"
   ansible.builtin.command: "/usr/sbin/matchpathcon -V /run/nginx.pid"

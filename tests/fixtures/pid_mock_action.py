@@ -28,6 +28,12 @@ class ActionModule(ActionBase):
             return {"changed": not check}
         if action == "command":
             argv = args.get("argv", [])
+            if argv and argv[0] == "/usr/bin/systemctl":
+                if argv != ["/usr/bin/systemctl", "show", "--property=ActiveState",
+                            "--property=SubState", "nginx.service"]:
+                    raise AssertionError(f"Unexpected systemctl command: {argv}")
+                lines = variables["mock_systemd_properties"]
+                return {"rc": 0, "stdout": "\n".join(lines), "stdout_lines": lines}
             if check:
                 return {"skipped": True, "stdout": "", "rc": 0}
             if not argv:

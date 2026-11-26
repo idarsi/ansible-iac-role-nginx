@@ -14,8 +14,8 @@ regression.
 
 ## Scorecard
 
-Focused PID reconciliation/handler-graph reassessment (2026-11-26): assessed ref is the
-uncommitted working tree after clean `e7476e6` on
+Focused PID reconciliation/stopped-fixture reassessment (2026-11-26): assessed ref is the
+uncommitted working tree after clean `cae9ff20770bf9ba0923432a5131f0f7ee24aa6d` on
 `update/optional-managed-molecule`. The full criterion scorecard below is
 retained at **66.5/100 → 66%, Beta**. Shared validation, narrow active-policy
 PID relabeling, dry-run handling and additional enforcing-guest assertions
@@ -44,6 +44,16 @@ with mocked host actions and a forbidden transport, including a negative
 control that reproduces the original block error. These current/next
 source/mock checks do not establish guest acceptance. Beta / 66% and every
 criterion score remain unchanged; no runtime or production claim is added.
+
+Campaign 344 on clean `cae9ff2` passed converge/idempotence but failed the
+stopped-service fixture's literal service-facts `stopped` assertion in both Rocky 10
+current/next verifiers (worker exit 2; cleanup `cleaned`). Actual service
+properties were not printed, so inactive/dead remains unproven. The focused
+working-tree correction requires explicit systemd `inactive`/`dead` properties
+with actionable PID diagnostics, covered by isolated mocks rather than a
+guest rerun. This likely fixture portability correction supplies no new
+functional, lifecycle, recovery or platform acceptance. Every criterion and
+the Beta cap remain unchanged: **66.5/100 → 66%, Beta**.
 
 | Category | Criterion scores | Subtotal |
 |---|---|---|

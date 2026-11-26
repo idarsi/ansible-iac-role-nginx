@@ -2,6 +2,27 @@
 
 ## Focused PID-label regression update
 
+Campaign 344 at clean role `cae9ff20770bf9ba0923432a5131f0f7ee24aa6d`
+reached `kvm-rocky10-selinux` verification in both current/next lanes after
+converge and idempotence passed. Both workers exited 2, with cleanup `cleaned`.
+The stopped-PID fixture failed its literal `service_facts` state `stopped`
+assertion after explicit stop and successful notified validation/relabel;
+reload was skipped. The actual service state was not printed. Upstream
+service-facts unit-file fallback can expose raw `inactive` rather than the
+listed-unit normalized `stopped`; this is a likely fixture portability defect,
+not a proven guest state or new production PID defect. The earlier unsafe-PID
+failure was expected and rescued.
+
+The working-tree correction reads only `systemctl show` ActiveState/SubState
+using fixed argv and requires exactly `inactive`/`dead`, independent of property
+order. Missing, duplicate or malformed properties fail with actual properties
+and PID metadata. The empty regular, non-symlink PID assertion and later label,
+preview, repair and live-master checks remain. Native-engine mocks exercise
+both service-facts spellings and reject running/failed/activating states and
+invalid properties without executing systemctl. Production tasks are unchanged.
+This correction has no guest acceptance yet; campaign 344 is not a runtime
+pass of the corrected working tree.
+
 Campaign 342 at clean role `e7476e6` and helper `491320f` reached the
 notified validation handler but failed with `Using a block as a handler is not
 supported` (retained cells 2933–2943; worker exit 4, cleanup `cleaned`). The
