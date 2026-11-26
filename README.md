@@ -39,7 +39,28 @@ name with `iac_dnf_repo_name`. DNF certificate and GPG
 verification are enabled by default. The role writes private keys as root with
 mode `0600`, validates configuration with `nginx -t` before starting Nginx,
 and only notifies the validation handler when configuration changes. The
-proxy preset enables upstream TLS certificate verification by default for HTTPS
+explicit start and notified validation paths share a defensive PID-file
+reconciliation step: after successful `nginx -t`, SELinux-enabled hosts restore
+the active policy's default context on an existing `/run/nginx.pid`. The role
+rejects symlinks, nonregular objects and multiply linked files, leaves absent
+files alone, and never deletes/truncates the PID file or changes its contents,
+owner or mode. It does not relabel `/run` recursively or hardcode a policy type.
+An existing live master is preserved; notified reload still requires a running
+service. Check mode skips `nginx -t` (which can create a PID file) and uses
+`restorecon -n -v` only on an existing safe file, reporting predicted changes.
+The safe probe always uses `-n`; the separate mutating command inherits Ansible
+check mode, including task/play/block overrides when CLI check mode is off.
+Only exact policy relabel/preview messages report a repair; informational
+messages about administrator-customized labels do not count as changes, and
+the role does not force overrides of those customizations.
+The target distribution's `policycoreutils` package must provide executable
+`/usr/sbin/restorecon`; missing tools and relabel failures stop convergence.
+The fixed root-owned `/run` path is trusted; these checks are not atomic against
+a privileged actor replacing the object between inspection and use.
+This is defensive convergence, not proof that SELinux caused the observed
+startup failure: its actual AVC and PID-file label were not captured.
+
+The proxy preset enables upstream TLS certificate verification by default for HTTPS
 upstreams (`nginx_proxy_ssl_verify: true`). The trust store defaults to the
 system CA bundle at `nginx_proxy_ssl_trusted_certificate:
 "/etc/pki/tls/certs/ca-bundle.crt"`; set this to another safe absolute CA file

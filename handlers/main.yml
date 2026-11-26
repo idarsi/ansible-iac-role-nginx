@@ -1,16 +1,22 @@
 ---
+###############################################################################
+#
+# main.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
 - name: "Check Nginx service state before reload"
   ansible.builtin.service_facts:
   listen: "Validate Nginx configuration"
 
 - name: "Validate Nginx configuration"
-  ansible.builtin.command: "/usr/sbin/nginx -t"
-  # This handler only runs after a notifying task changed configuration. Marking
-  # successful validation changed is what queues the dependent reload handler.
-  changed_when: true
+  ansible.builtin.include_tasks: "../tasks/nginx_config_test.yml"
+  vars:
+    nginx_validation_reload: true
   when: nginx_state | default('') not in ['absent', 'uninstall']
   listen: "Validate Nginx configuration"
-  notify: "Reload Nginx"
 
 - name: "Reload Nginx"
   ansible.builtin.systemd_service:

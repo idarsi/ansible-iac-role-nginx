@@ -1,4 +1,12 @@
 ---
+###############################################################################
+#
+# handler_reload_regression.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
 - name: "Instrument and verify the Nginx systemd reload path"
   block:
     - name: "Create the test-only reload wrapper directory"
@@ -135,6 +143,11 @@
       register: lifecycle_nginx_generation_before_reload
       changed_when: false
 
+    - name: "Capture live PID contents before notified validation"
+      ansible.builtin.slurp:
+        src: "/run/nginx.pid"
+      register: lifecycle_pid_before_reload
+
     - name: "Disable the lifecycle site to trigger validation and reload"
       ansible.builtin.include_role:
         name: "{{ playbook_dir | dirname | dirname }}"
@@ -178,6 +191,16 @@
           - >-
             lifecycle_nginx_generation_after_reload.stdout !=
             lifecycle_nginx_generation_before_reload.stdout
+
+    - name: "Read live PID contents after notified validation and reload"
+      ansible.builtin.slurp:
+        src: "/run/nginx.pid"
+      register: lifecycle_pid_after_reload
+
+    - name: "Assert configuration validation and reload preserve live PID contents"
+      ansible.builtin.assert:
+        that:
+          - lifecycle_pid_before_reload.content == lifecycle_pid_after_reload.content
 
     - name: "Install invalid configuration and verify validation blocks reload"
       block:

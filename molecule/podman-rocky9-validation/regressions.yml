@@ -1,8 +1,12 @@
 ---
 ###############################################################################
+#
 # regressions.yml
+#
 # @author Arsi Atomi
+#
 ###############################################################################
+
 - name: "Validate a minimal Nginx blueprint"
   hosts: "all"
   gather_facts: true
@@ -534,7 +538,22 @@
             '(?s)name: "Apply role file permission defaults".*?no_log: true.*?apply:\s+no_log: true\s+diff: false.*?no_log: true')
           - >-
             lookup('file', (playbook_dir | dirname | dirname) ~ '/handlers/main.yml') is search(
-            '(?s)name: "Validate Nginx configuration".*?changed_when: true.*?notify: "Reload Nginx"')
+            '(?s)name: "Validate Nginx configuration".*?include_tasks: "../tasks/nginx_config_test.yml".*?nginx_validation_reload: true')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/nginx_config_test.yml') is search(
+            '(?s)name: "Queue reload after successful notified Nginx validation".*?changed_when: nginx_validation_reload.*?notify: "Reload Nginx"')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/started.yml') is search(
+            'include_tasks: nginx_config_test.yml')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/nginx_pid_guard.yml') is search(
+            '(?s)path: "/run/nginx.pid".*?follow: false.*?isreg.*?islnk.*?nlink')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/nginx_config_test.yml') is search(
+            '(?s)include_tasks: nginx_pid_guard.yml.*?/usr/sbin/nginx -t.*?include_tasks: nginx_pid_guard.yml')
+          - >-
+            lookup('file', (playbook_dir | dirname | dirname) ~ '/tasks/nginx_config_test.yml') is search(
+            '(?s)name: "Predict only the Nginx PID file default context repair".*?"-n".*?check_mode: false')
           - >-
             lookup('file', (playbook_dir | dirname | dirname) ~ '/handlers/main.yml') is search(
             '(?s)name: "Reload Nginx".*?systemd_service:.*?name:.*?iac_service_name.*?get\(.*?iac_service_name.*?\.service')

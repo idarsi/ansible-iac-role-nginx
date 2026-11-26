@@ -1,5 +1,67 @@
 # Testing
 
+## Focused PID-label regression update
+
+The working-tree fix after `ada402d` shares configuration validation between
+explicit `started` and the notified handler. After successful `nginx -t`, only
+an existing regular, non-symlink, single-link `/run/nginx.pid` is eligible for
+active-policy `restorecon -v` on SELinux-enabled targets. Check mode skips
+`nginx -t` and uses `restorecon -n -v`; absent files are not created. No PID
+content, owner or mode changes, recursive `/run` relabel, permissive policy,
+allow module or proxy-boolean changes are part of this fix. Unsafe objects are
+rejected before configuration testing and checked again before relabeling.
+These fixed-path guards trust root-owned `/run`; they do not provide atomic
+protection against concurrent privileged replacement.
+
+The safe policy probe always runs with `-n -v`, and the separate mutating
+command inherits effective Ansible check mode rather than consulting the
+CLI-only `ansible_check_mode` variable. This preserves nonmutation for CLI,
+play, block and task previews, while the probe reports predicted repairs.
+The guest regression explicitly checks task- and block-inherited previews with
+CLI check mode off against the intentionally mislabeled fixture. Only exact
+`Would relabel /run/nginx.pid from ... to ...` and
+`Relabeled /run/nginx.pid from ... to ...` lines count as predicted/actual
+repairs. Informational administrator-customization messages do not report
+changes and do not trigger a forced policy override.
+
+Cheap source/mock verification, from the existing approved controller
+environment, requires no guest, backend, collection installation or additional
+Python dependency:
+
+```bash
+python -B -W error::DeprecationWarning -m unittest discover \
+  -s tests -p test_nginx_pid_validation.py -v
+```
+
+This loads the actual task YAML, checks Ansible's inherited check-mode
+attributes and runs the native command module with its execution boundary
+mocked. Fixtures cover CLI/play/block/task previews (including CLI false),
+normal-mode execution eligibility, exact changed-message recognition and an
+administrator-customized informational message with zero change. It does not
+prove effective guest policy, real restorecon output, service behavior or
+full role/handler runtime acceptance.
+
+The existing enforcing `kvm-rocky9-lifecycle` and `kvm-rocky10-selinux` verifiers
+reuse `tasks/pid_label_regression.yml` from the lifecycle scenario. Intended
+assertions cover unsafe symlink rejection/target preservation, absent-PID fresh
+start, stopped-handler validation without service start, intentionally
+mislabeled stopped-PID repair through the handler, dry-run prediction without
+mutation, repeated start/reconciliation, and live PID/master preservation
+across configuration testing and notified reload. `matchpathcon -V` checks the
+active policy without assuming a type. The existing instrumented lifecycle
+reload test additionally checks exact live PID contents, retaining its worker
+replacement/exactly-one-reload and invalid-configuration rejection assertions.
+Guest-only fixtures use distribution policy tools; no new scenario, controller
+dependency, shared pin or production policy exception is introduced.
+
+**Runtime acceptance remains pending.** Developer checks are restricted to
+targeted source/lint/syntax checks; no Molecule/TUI campaign, backend discovery,
+guest connection or service probe was authorized. Campaign 341 at clean role
+`ada402d` and helper `491320f` reported PID-open EACCES/systemd protocol failure
+in current and next lanes, but the effective label and AVC were not observed.
+Do not treat this defensive fix as a proven incident diagnosis or transfer
+historical passes to it. Maturity remains Beta / 66%; see the assessment.
+
 ## Current matrix and acceptance boundary
 
 All eight scenarios declare optional managed **whole-scenario** execution and

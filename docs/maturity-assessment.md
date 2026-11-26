@@ -14,6 +14,28 @@ regression.
 
 ## Scorecard
 
+Focused PID reconciliation reassessment (2026-11-26): assessed ref is the
+uncommitted working tree after clean `ada402d` on
+`update/optional-managed-molecule`. The full criterion scorecard below is
+retained at **66.5/100 → 66%, Beta**. Shared validation, narrow active-policy
+PID relabeling, dry-run handling and additional enforcing-guest assertions
+improve source-level recovery intent, but provide no new runtime acceptance.
+No criterion multiplier changes: recovery, lifecycle, platforms and functional
+testing remain partial; static checks do not earn guest-runtime credit. The
+observed campaign 341 EACCES/protocol failure lacks an actual AVC/label capture,
+so this is not a confirmed SELinux root-cause finding. Existing evidence gaps
+and the Beta cap remain unchanged. The smallest next evidence increment is an
+authorized enforcing Rocky 9/10 run of the updated existing scenarios, including
+idempotence/check-mode and live-PID preservation, followed by the missing RHEL
+and lifecycle coverage. No RC or production-readiness approval is claimed.
+
+The focused follow-up separates an always-safe `restorecon -n -v` probe from
+an inheriting mutating command, covering non-CLI check-mode overrides, and
+recognizes only exact relabel messages instead of arbitrary stdout.
+Targeted source/native-command mocks include administrator-customized labels
+and CLI-false inherited previews. These checks close source-level review
+findings but supply no guest-runtime evidence or criterion score increase.
+
 | Category | Criterion scores | Subtotal |
 |---|---|---|
 | Scope | Purpose 3/3; inputs 2.5/5; support 2/4 | 7.5/12 |

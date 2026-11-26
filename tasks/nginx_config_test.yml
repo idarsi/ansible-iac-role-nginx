@@ -1,0 +1,79 @@
+---
+###############################################################################
+#
+# nginx_config_test.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+# nginx -t can create/open the PID file even while the service is stopped.
+# /run is a trusted root-owned parent; these guards do not defend against a
+# privileged actor replacing the path between inspection and use.
+- name: "Guard the Nginx PID path before configuration validation"
+  ansible.builtin.include_tasks: nginx_pid_guard.yml
+
+- name: "Test Nginx configuration"
+  ansible.builtin.command: "/usr/sbin/nginx -t"
+  changed_when: false
+
+- name: "Reconcile the Nginx PID label under active SELinux policy"
+  when: ansible_facts.selinux.status | default('disabled') == 'enabled'
+  block:
+    - name: "Inspect the Nginx PID file after configuration validation"
+      ansible.builtin.include_tasks: nginx_pid_guard.yml
+
+    - name: "Restore the existing Nginx PID file policy context"
+      when: nginx_pid_stat.stat.exists
+      block:
+        - name: "Check the target restorecon prerequisite"
+          ansible.builtin.stat:
+            path: "/usr/sbin/restorecon"
+          register: nginx_restorecon_tool
+
+        - name: "Require the distribution SELinux policy tool"
+          ansible.builtin.assert:
+            that:
+              - nginx_restorecon_tool.stat.executable | default(false)
+            fail_msg: "Install policycoreutils from the target distribution repositories: /usr/sbin/restorecon is required when SELinux is enabled."
+
+        # No recursion, forced context, deletion, or content/permission changes.
+        # restorecon does not follow a final symlink; the guards reject it too.
+        # Always probe with -n: ansible_check_mode reflects the CLI setting,
+        # not necessarily an inherited task/play/block check_mode override.
+        - name: "Predict only the Nginx PID file default context repair"
+          ansible.builtin.command:
+            argv:
+              - "/usr/sbin/restorecon"
+              - "-n"
+              - "-v"
+              - "/run/nginx.pid"
+          environment:
+            LC_ALL: "C"
+          check_mode: false
+          register: nginx_pid_restorecon
+          changed_when: nginx_pid_restorecon.stdout is search('(?m)^Would relabel /run/nginx[.]pid from \\S+ to \\S+$')
+
+        # The mutating command MUST inherit effective check mode. The command
+        # module then skips execution in CLI, play, block and task previews.
+        # The safe probe above still reports a predicted repair in those modes.
+        - name: "Restore only the Nginx PID file default context"
+          ansible.builtin.command:
+            argv:
+              - "/usr/sbin/restorecon"
+              - "-v"
+              - "/run/nginx.pid"
+          environment:
+            LC_ALL: "C"
+          register: nginx_pid_relabel
+          when: nginx_pid_restorecon.stdout is search('(?m)^Would relabel /run/nginx[.]pid from \\S+ to \\S+$')
+          changed_when: nginx_pid_relabel.stdout is search('(?m)^Relabeled /run/nginx[.]pid from \\S+ to \\S+$')
+
+# Queue reload only after both validation and label reconciliation succeed.
+# The handler runs only after configuration changes; explicit started does not
+# queue reload, preserving an already-running master and worker generation.
+- name: "Queue reload after successful notified Nginx validation"
+  ansible.builtin.debug:
+    msg: "Nginx configuration validation and PID label reconciliation succeeded."
+  changed_when: nginx_validation_reload | default(false) | bool
+  notify: "Reload Nginx"

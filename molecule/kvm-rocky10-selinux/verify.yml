@@ -1,9 +1,20 @@
 ---
+###############################################################################
+#
+# verify.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
 - name: "Verify SELinux labels and Nginx content access"
   hosts: "all"
   become: true
   gather_facts: true
   tasks:
+    - name: "Verify enforcing PID label reconciliation and preservation"
+      ansible.builtin.include_tasks: "../kvm-rocky9-lifecycle/tasks/pid_label_regression.yml"
+
     - name: "Confirm SELinux remains enforcing"
       ansible.builtin.assert:
         that:

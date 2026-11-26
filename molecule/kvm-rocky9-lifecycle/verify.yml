@@ -24,6 +24,9 @@
                   - path: "/healthz"
                     return: "200 ok"
   tasks:
+    - name: "Verify enforcing PID label reconciliation and preservation"
+      ansible.builtin.include_tasks: "tasks/pid_label_regression.yml"
+
     - name: "Read the site before location removal"
       ansible.builtin.slurp:
         src: "/etc/nginx/sites-available/example.org"
