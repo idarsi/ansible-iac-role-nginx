@@ -32,6 +32,8 @@ jobs:
           done
       - name: "Lint"
         run: "ANSIBLE_ROLES_PATH=.. ansible-lint --profile production"
+      - name: "Check managed CI shell with mocked backends"
+        run: "python -B -m unittest discover -s tests -p test_ci_backend_context.py -v"
       - name: "Checkout pinned managed helper"
         env:
           HELPER_SHA: "7fc510d05cfce04e6dc60d70285e8ed9eee725e5"
@@ -50,13 +52,20 @@ jobs:
             libvirt-clients libvirt-daemon-system iproute2
           sudo systemctl start libvirtd.socket libvirtd.service
           sudo usermod --append --groups libvirt "$(id -un)"
-          test "$(id -u)" -ne 0
-          podman info
-          podman network ls --format json
-          sg libvirt -c 'virsh --connect qemu:///system net-list --all'
       - name: "Managed nonprivileged validation scenarios"
         run: |
-          sg libvirt -c 'bash -e -o pipefail' <<'SCRIPT'
+          sg libvirt -c 'bash -Eeuo pipefail' <<'SCRIPT'
+          trap 'rc=$?; printf "Managed CI failed at line %s (exit %s)\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+          runner_uid="$(id -u)"
+          test "$runner_uid" -ne 0
+          libvirt_group="$(getent group libvirt)"
+          IFS=: read -r _ _ libvirt_gid _ <<< "$libvirt_group"
+          runner_gid="$(id -g)"
+          test "$runner_gid" = "$libvirt_gid"
+          id
+          podman --remote=false info
+          podman --remote=false network ls --format json
+          virsh --connect qemu:///system net-list --all
           for scenario in podman-rocky9-blueprint-validation podman-rocky9-validation; do
             context="$("$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" resolve \
               --backend podman --scenario "$scenario" --role "$PWD")"

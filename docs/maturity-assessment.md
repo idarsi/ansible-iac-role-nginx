@@ -79,6 +79,21 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+CI credential-context reassessment (2026-11-27): assessed ref is the working
+tree after `a1b5b8a3e520679db29c847e8a56c7c51aed4cdb` on
+`update/optional-managed-molecule`. Hosted run
+[`45966106121`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45966106121)
+fetched the published helper and passed blueprint checks, then failed final
+destroy with `rootless netns: kill network process: permission denied`.
+The workflow now keeps initialization, discovery, private collection installs
+and both complete lifecycles inside one nonroot libvirt credential context.
+A context mismatch is plausible, not a proven kernel or network-process
+root cause. Focused shell mocks do not establish backend/cleanup acceptance;
+fresh hosted CI remains pending. Every criterion and category subtotal above
+is retained, including CI enforcement **0/1** (failing latest CI and no required
+merge policy established): **66.5/100 → 66%, Beta**. The failing-CI state cap,
+existing runtime/support gaps and lack of production approval remain.
+
 Source-pin publication reassessment (2026-11-27): assessed ref is
 `update/optional-managed-molecule`, working-tree pin/documentation correction
 after `2c855f7e2e17a48c02d7aeedf2f5aba223706af2`. CI run

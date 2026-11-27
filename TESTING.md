@@ -381,7 +381,14 @@ The configured workflow retains inventory/example parsing, syntax and production
 lint and pins the reviewed helper. It arranges both discovery prerequisites on
 its disposable Ubuntu runner and runs the two nonprivileged managed Podman
 scenarios as the unprivileged runner. Collections are installed into resolved
-per-context directories. Host setup in this workflow is not authorization to
+per-context directories. All Podman initialization, Podman/libvirt discovery,
+context resolution, private collection installation and both complete
+`molecule test` lifecycles run inside one `sg libvirt` shell, with the same
+nonroot UID and libvirt primary GID. The shell asserts those credentials,
+prints runner identity and local discovery, and reports the original failure
+status and shell line without retries, recovery or ignored destroy errors.
+The existing privileged package/service/group setup remains separate and
+unchanged. Host setup in this workflow is not authorization to
 modify a developer's host. This configuration has **not** completed successfully
 or been accepted as a GitHub CI pass for the migration.
 
@@ -392,6 +399,35 @@ syntax and lint checks, then failed fetching unpublished helper
 backend setup or scenario execution. The current pin uses the published tested
 revision above. Replacement CI acceptance remains pending; this publication
 fix adds no runtime credit and does not change Beta / 66% maturity.
+
+Run [`45966106121`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45966106121)
+at role `a1b5b8a3e520679db29c847e8a56c7c51aed4cdb` fetched the published
+helper and passed blueprint checks, but final destroy failed with
+`rootless netns: kill network process: permission denied`. The hosted runner
+reported Ubuntu 26.04.1, kernel 7, Podman 5.7.0, netavark 1.16.1,
+aardvark-dns 1.16.0 and pasta (not slirp). Podman initialization previously
+ran before `sg libvirt`, while lifecycle execution ran inside it. A primary-GID
+context mismatch is plausible; neither a kernel regression nor the precise
+PID-file-read versus process-kill failure is established. The focused workflow
+correction keeps initialization and lifecycles in one credential context;
+it does not repair that failed runner's retained state. Fresh hosted CI
+acceptance remains pending.
+
+The host-free regression extracts the actual managed-step shell from workflow
+YAML. A temporary allowlisted PATH mocks `sg`, identity lookup, Podman, virsh,
+the helper, JSON parsing, collection installation and Molecule; unknown commands
+fail closed. It never executes the prerequisite step or a real backend.
+It checks initialization/discovery and both full scenario commands in order,
+and original nonzero status/no subsequent calls on each boundary failure.
+CI runs it before backend setup. From an existing approved controller
+environment (existing PyYAML plus Python standard library only):
+
+```bash
+python -B -m unittest discover -s tests -p test_ci_backend_context.py -v
+```
+
+This is shell-control-flow/mock evidence, not Podman, cleanup or guest
+acceptance. No local backend execution or GitHub rerun is part of this correction.
 
 The previous privileged Podman service jobs and scheduled platform-matrix job
 cannot simply become hosted Ubuntu KVM jobs. Guardrails, lifecycle, check-mode,
