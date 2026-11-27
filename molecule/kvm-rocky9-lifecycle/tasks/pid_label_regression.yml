@@ -1,0 +1,322 @@
+---
+###############################################################################
+#
+# pid_label_regression.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+# Guest-only fixtures, outside convergence/idempotence. Reused on enforcing
+# Rocky 9 lifecycle and Rocky 10 SELinux guests; never run on the controller.
+- name: "Require enforcing SELinux for PID label regressions"
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.selinux.status == 'enabled'
+      - ansible_facts.selinux.mode == 'enforcing'
+
+- name: "Stop Nginx before the absent PID regression"
+  ansible.builtin.systemd_service:
+    name: "nginx.service"
+    state: "stopped"
+
+- name: "Remove only the disposable guest's stopped Nginx PID fixture"
+  ansible.builtin.file:
+    path: "/run/nginx.pid"
+    state: "absent"
+
+- name: "Verify an unsafe PID symlink is rejected without modifying its target"
+  block:
+    - name: "Reset the unsafe PID rejection result on every verification"
+      ansible.builtin.set_fact:
+        pid_unsafe_rejected: false
+
+    - name: "Create a disposable PID symlink target sentinel"
+      ansible.builtin.copy:
+        dest: "/run/nginx-pid-regression-sentinel"
+        content: "do-not-touch\n"
+        mode: "0600"
+
+    - name: "Create the unsafe PID symlink fixture"
+      ansible.builtin.file:
+        path: "/run/nginx.pid"
+        src: "/run/nginx-pid-regression-sentinel"
+        state: "link"
+
+    - name: "Attempt configuration validation with the unsafe PID object"
+      block:
+        - name: "Validate the unsafe PID fixture through the shared path"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+            tasks_from: "nginx_config_test.yml"
+      rescue:
+        - name: "Require the specific unsafe PID rejection"
+          ansible.builtin.assert:
+            that:
+              - "'/run/nginx.pid must be absent or a regular, non-symlink file with one link' in ansible_failed_result.msg"
+
+        - name: "Record the expected unsafe PID rejection"
+          ansible.builtin.set_fact:
+            pid_unsafe_rejected: true
+
+    - name: "Read the PID symlink target sentinel after rejection"
+      ansible.builtin.slurp:
+        src: "/run/nginx-pid-regression-sentinel"
+      register: pid_unsafe_sentinel
+
+    - name: "Assert the unsafe path was rejected and its target preserved"
+      ansible.builtin.assert:
+        that:
+          - pid_unsafe_rejected | default(false)
+          - pid_unsafe_sentinel.content | b64decode == 'do-not-touch\n'
+  always:
+    - name: "Remove only the disposable unsafe PID fixtures"
+      ansible.builtin.file:
+        path: "{{ pid_unsafe_fixture }}"
+        state: "absent"
+      loop:
+        - "/run/nginx.pid"
+        - "/run/nginx-pid-regression-sentinel"
+      loop_control:
+        loop_var: pid_unsafe_fixture
+
+# Preview the production tasks without re-registering the role's handlers.
+# include_role under inherited check mode replaces later real handlers with
+# preview handlers in this play, causing nginx -t and actual repair to skip.
+- name: "Preview configuration validation while the PID file is absent"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
+    apply:
+      check_mode: true
+
+- name: "Inspect the absent PID path after check mode"
+  ansible.builtin.stat:
+    path: "/run/nginx.pid"
+    follow: false
+  register: pid_absent_after_check
+
+- name: "Assert check mode did not create a PID file"
+  ansible.builtin.assert:
+    that:
+      - not pid_absent_after_check.stat.exists
+
+- name: "Start Nginx with an initially absent PID file"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "started"
+    iac_ansible_report: false
+    iac_blueprint:
+      nginx: {}
+
+- name: "Verify the fresh-start PID label against active policy"
+  ansible.builtin.command: "/usr/sbin/matchpathcon -V /run/nginx.pid"
+  changed_when: false
+
+- name: "Stop Nginx before exercising the notified validation path"
+  ansible.builtin.systemd_service:
+    name: "nginx.service"
+    state: "stopped"
+
+- name: "Notify configuration validation while Nginx is stopped"
+  ansible.builtin.debug:
+    msg: "Exercise the real validation handler without starting the service."
+  changed_when: true
+  notify: "Validate Nginx configuration"
+
+- name: "Flush stopped-service validation"
+  ansible.builtin.meta: flush_handlers
+
+- name: "Inspect the PID file created by stopped-service validation"
+  ansible.builtin.stat:
+    path: "/run/nginx.pid"
+    follow: false
+  register: pid_stopped_validation
+
+- name: "Read the service state after stopped-service validation"
+  ansible.builtin.command:
+    argv:
+      - "/usr/bin/systemctl"
+      - "show"
+      - "--property=ActiveState"
+      - "--property=SubState"
+      - "nginx.service"
+  changed_when: false
+  check_mode: false
+  register: pid_stopped_service
+
+- name: "Assert validation retained a stopped service and an empty regular PID file"
+  ansible.builtin.assert:
+    that:
+      - pid_stopped_service.stdout_lines | default([]) | sort == ['ActiveState=inactive', 'SubState=dead']
+      - pid_stopped_validation.stat.isreg | default(false)
+      - not pid_stopped_validation.stat.islnk | default(false)
+      - pid_stopped_validation.stat.size | default(-1) == 0
+    fail_msg: >-
+      Expected nginx.service ActiveState=inactive and SubState=dead with an empty
+      regular, non-symlink /run/nginx.pid after stopped-service validation.
+      Actual systemd properties: {{ pid_stopped_service.stdout_lines | default([]) }};
+      PID metadata: {{ pid_stopped_validation.stat }}.
+
+- name: "Verify stopped-handler PID label against active policy"
+  ansible.builtin.command: "/usr/sbin/matchpathcon -V /run/nginx.pid"
+  changed_when: false
+
+- name: "Give the stopped PID fixture an intentionally incorrect SELinux type"
+  ansible.builtin.command: "/usr/bin/chcon -t default_t /run/nginx.pid"
+  changed_when: true
+
+- name: "Capture the mislabeled PID fixture metadata"
+  ansible.builtin.command: "stat -c %i:%s:%u:%g:%a:%C /run/nginx.pid"
+  changed_when: false
+  register: pid_mislabeled_before
+
+- name: "Preview PID label reconciliation without running nginx -t"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
+    apply:
+      check_mode: true
+
+- name: "Assert task-inherited preview skipped the mutating relabel with CLI check mode off"
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+      - nginx_pid_relabel.skipped
+
+- name: "Capture the PID fixture after check mode"
+  ansible.builtin.command: "stat -c %i:%s:%u:%g:%a:%C /run/nginx.pid"
+  changed_when: false
+  register: pid_mislabeled_after_check
+
+- name: "Assert check mode predicts the relabel without changing the fixture"
+  ansible.builtin.assert:
+    that:
+      - nginx_pid_restorecon.changed
+      - pid_mislabeled_before.stdout == pid_mislabeled_after_check.stdout
+
+- name: "Preview PID repair using block-inherited check mode"
+  check_mode: true
+  block:
+    - name: "Validate the mislabeled PID using the block check-mode context"
+      ansible.builtin.include_tasks:
+        file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
+
+- name: "Capture the PID fixture after block-inherited check mode"
+  ansible.builtin.command: "stat -c %i:%s:%u:%g:%a:%C /run/nginx.pid"
+  changed_when: false
+  register: pid_mislabeled_after_block_check
+
+- name: "Assert block-inherited preview predicts repair without changing the fixture"
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+      - nginx_pid_restorecon.changed
+      - nginx_pid_relabel.skipped
+      - pid_mislabeled_before.stdout == pid_mislabeled_after_block_check.stdout
+
+- name: "Repair the existing mislabeled stopped PID through notified validation"
+  ansible.builtin.debug:
+    msg: "Exercise policy reconciliation through the stopped validation handler."
+  changed_when: true
+  notify: "Validate Nginx configuration"
+
+- name: "Flush mislabeled PID validation"
+  ansible.builtin.meta: flush_handlers
+
+- name: "Assert the actual repair reports a change"
+  ansible.builtin.assert:
+    that:
+      - nginx_pid_restorecon.changed
+      - nginx_pid_relabel.changed
+      - not nginx_pid_relabel.skipped | default(false)
+
+- name: "Capture PID fixture metadata after the actual repair"
+  ansible.builtin.command: "stat -c %i:%s:%u:%g:%a:%C /run/nginx.pid"
+  changed_when: false
+  register: pid_repaired_after
+
+- name: "Assert relabeling preserves the inode, empty contents, owner, group and mode"
+  ansible.builtin.assert:
+    that:
+      - pid_mislabeled_before.stdout.split(':')[:5] == pid_repaired_after.stdout.split(':')[:5]
+      - pid_mislabeled_before.stdout != pid_repaired_after.stdout
+
+- name: "Verify the repaired PID label against active policy"
+  ansible.builtin.command: "/usr/sbin/matchpathcon -V /run/nginx.pid"
+  changed_when: false
+
+- name: "Start Nginx after stopped-handler PID reconciliation"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "started"
+    iac_ansible_report: false
+    iac_blueprint:
+      nginx: {}
+
+- name: "Capture the live PID file content"
+  ansible.builtin.slurp:
+    src: "/run/nginx.pid"
+  register: pid_live_before
+
+- name: "Capture the running master identity including process start time"
+  ansible.builtin.command:
+    argv:
+      - "cat"
+      - "/proc/{{ pid_live_before.content | b64decode | trim }}/stat"
+  changed_when: false
+  register: pid_master_before
+
+- name: "Repeat explicit started without restarting or relabeling Nginx"
+  ansible.builtin.include_role:
+    name: "{{ playbook_dir | dirname | dirname }}"
+  vars:
+    state: "started"
+    iac_ansible_report: false
+    iac_blueprint:
+      nginx: {}
+
+- name: "Assert repeated validation reports no PID label change"
+  ansible.builtin.assert:
+    that:
+      - not nginx_pid_restorecon.changed
+
+- name: "Preview running configuration validation and PID reconciliation"
+  ansible.builtin.include_tasks:
+    file: "{{ playbook_dir | dirname | dirname }}/tasks/nginx_config_test.yml"
+    apply:
+      check_mode: true
+
+- name: "Assert running check mode predicts no PID label change"
+  ansible.builtin.assert:
+    that:
+      - not nginx_pid_restorecon.changed
+
+- name: "Notify running configuration validation and reload"
+  ansible.builtin.debug:
+    msg: "Exercise validation and reload with a live master."
+  changed_when: true
+  notify: "Validate Nginx configuration"
+
+- name: "Flush running-service validation"
+  ansible.builtin.meta: flush_handlers
+
+- name: "Capture the PID content after repeated validation and reload"
+  ansible.builtin.slurp:
+    src: "/run/nginx.pid"
+  register: pid_live_after
+
+- name: "Capture the master identity after validation and reload"
+  ansible.builtin.command:
+    argv:
+      - "cat"
+      - "/proc/{{ pid_live_after.content | b64decode | trim }}/stat"
+  changed_when: false
+  register: pid_master_after
+
+- name: "Assert validation and reload preserve the live PID and master identity"
+  ansible.builtin.assert:
+    that:
+      - pid_live_before.content == pid_live_after.content
+      - pid_master_before.stdout.split()[21] == pid_master_after.stdout.split()[21]
+      - not nginx_pid_restorecon.changed

@@ -1,0 +1,26 @@
+---
+driver:
+  name: "default"
+  safe_files:
+    - "${MOLECULE_EPHEMERAL_DIRECTORY}/collections/*"
+  options:
+    managed: true
+platforms:
+  - name: "nginx-guardrails-rocky9"
+    install_source: "${IDARSI_TEST_KVM_INSTALL_SOURCE}"
+    kickstart: "${IDARSI_TEST_ENVIRONMENT}/examples/molecule-kvm/rocky9-10.ks.tmpl"
+    memory_mb: 4096
+    vcpus: 2
+    disk_size_gb: 30
+    install_timeout: 3600
+    ssh_user: "molecule"
+provisioner:
+  name: "ansible"
+  env:
+    IDARSI_MOLECULE_BACKEND: "kvm"
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  playbooks:
+    create: "${IDARSI_TEST_ENVIRONMENT}/molecule/managed/create.yml"
+    destroy: "${IDARSI_TEST_ENVIRONMENT}/molecule/managed/destroy.yml"
+verifier:
+  name: "ansible"

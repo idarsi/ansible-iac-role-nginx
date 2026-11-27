@@ -1,0 +1,27 @@
+---
+###############################################################################
+# converge.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Converge the stable Nginx lifecycle installation"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Install the lifecycle baseline on every convergence"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "install"
+        iac_blueprint:
+          nginx:
+            sites:
+              - name: "example.org"
+                autoconfigure: "none"
+                ssl_certificate_type: "none"
+                servers:
+                  - listen: "8080"
+                    server_name: "example.org"
+                    locations:
+                      - path: "/healthz"
+                        return: "200 ok"

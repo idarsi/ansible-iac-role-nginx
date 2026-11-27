@@ -1,0 +1,25 @@
+---
+###############################################################################
+#
+# verify.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Verify validation preserved package and filesystem state"
+  hosts: "all"
+  gather_facts: false
+  tasks:
+    - name: "Read the prepare-only baseline"
+      ansible.builtin.slurp:
+        src: "/var/tmp/nginx-blueprint-validation-baseline.json"
+      register: blueprint_baseline
+
+    - name: "Observe state after validation and idempotence"
+      ansible.builtin.include_tasks: "tasks/snapshot.yml"
+
+    - name: "Require unchanged packages, paths, permissions and sentinel content"
+      ansible.builtin.assert:
+        that:
+          - blueprint_snapshot == (blueprint_baseline.content | b64decode | from_json)

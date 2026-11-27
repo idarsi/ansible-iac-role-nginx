@@ -1,5 +1,12 @@
-> **Maturity State: Beta**<br>
-> **RC Readiness: 94%**
+> **Maturity State: Beta**
+>
+> **RC Readiness: 66%**
+
+See the [evidence-based maturity reassessment](docs/maturity-assessment.md).
+The focused preview-order fixture assessment covers `6075aa3` plus working-tree changes;
+native-engine mocks are source-level evidence, not guest/runtime acceptance.
+The previous 94% summary is historical, not the current score; this reassessment
+is not a regression caused by the optional managed-test integration.
 
 See the executable [inventory example](docs/inventory-example.yml) and
 [playbook example](docs/playbook-example.yml) for a minimal installation.
@@ -22,9 +29,11 @@ Support and security defaults
 -----------------------------
 
 The supported platforms are Rocky Linux 9/10 and Red Hat Enterprise Linux
-9/10. Rocky Linux 9 and 10 are tested in the scheduled platform matrix; the
-pull-request functional matrix uses Rocky Linux 9. RHEL is supported but is
-not automatically covered by this repository's Molecule matrix. See
+9/10. Historical Podman CI covered Rocky Linux 9/10; the renamed managed KVM
+matrix is source-reviewed only and awaits runtime acceptance. Current CI
+configures two Rocky Linux 9 validation scenarios; full host/service coverage
+requires a provisioned KVM runner and remains manual/pending. RHEL is supported
+but is not automatically covered by this repository's Molecule matrix. See
 [TESTING.md](TESTING.md).
 
 Nginx uses the HTTPS `nginx-stable` repository by default; override its section
@@ -32,7 +41,28 @@ name with `iac_dnf_repo_name`. DNF certificate and GPG
 verification are enabled by default. The role writes private keys as root with
 mode `0600`, validates configuration with `nginx -t` before starting Nginx,
 and only notifies the validation handler when configuration changes. The
-proxy preset enables upstream TLS certificate verification by default for HTTPS
+explicit start and notified validation paths share a defensive PID-file
+reconciliation step: after successful `nginx -t`, SELinux-enabled hosts restore
+the active policy's default context on an existing `/run/nginx.pid`. The role
+rejects symlinks, nonregular objects and multiply linked files, leaves absent
+files alone, and never deletes/truncates the PID file or changes its contents,
+owner or mode. It does not relabel `/run` recursively or hardcode a policy type.
+An existing live master is preserved; notified reload still requires a running
+service. Check mode skips `nginx -t` (which can create a PID file) and uses
+`restorecon -n -v` only on an existing safe file, reporting predicted changes.
+The safe probe always uses `-n`; the separate mutating command inherits Ansible
+check mode, including task/play/block overrides when CLI check mode is off.
+Only exact policy relabel/preview messages report a repair; informational
+messages about administrator-customized labels do not count as changes, and
+the role does not force overrides of those customizations.
+The target distribution's `policycoreutils` package must provide executable
+`/usr/sbin/restorecon`; missing tools and relabel failures stop convergence.
+The fixed root-owned `/run` path is trusted; these checks are not atomic against
+a privileged actor replacing the object between inspection and use.
+This is defensive convergence, not proof that SELinux caused the observed
+startup failure: its actual AVC and PID-file label were not captured.
+
+The proxy preset enables upstream TLS certificate verification by default for HTTPS
 upstreams (`nginx_proxy_ssl_verify: true`). The trust store defaults to the
 system CA bundle at `nginx_proxy_ssl_trusted_certificate:
 "/etc/pki/tls/certs/ca-bundle.crt"`; set this to another safe absolute CA file
@@ -286,3 +316,12 @@ git clone --recurse-submodules https://github.com/idarsi/ansible-iac-role-nginx.
 See [TESTING.md](TESTING.md) for the tested matrix, observable lifecycle
 checks, and commands. See [CONTRIBUTING.md](CONTRIBUTING.md) for development
 workflow.
+
+All eight scenarios support ordinary direct Molecule execution and declare
+optional TUI-managed whole-scenario execution: two nonprivileged Rocky Linux 9
+Podman validation scenarios and six KVM scenarios, including the complete
+Rocky Linux 9/10 matrix. See `TESTING.md` for exact IDs and prerequisites.
+The migration working tree is source-reviewed only; no runtime tests were run
+at the user's request. Historical evidence retains its original SHA and IDs
+and does not transfer to renamed or migrated scenarios. The Beta / 66% maturity
+score is unchanged; metadata is test intent, not runtime acceptance.

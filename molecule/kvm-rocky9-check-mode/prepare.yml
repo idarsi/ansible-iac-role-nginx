@@ -1,0 +1,78 @@
+---
+###############################################################################
+# prepare.yml
+# @author Arsi Atomi
+###############################################################################
+
+- name: "Exercise package overrides before installing the Nginx fixture"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Select the available non-protected package override fixture"
+      ansible.builtin.set_fact:
+        # Keep the documented default separate from the test-only override so
+        # the fixture proves that the production package variable is honored.
+        validation_documented_default_package: "nginx"
+        iac_dnf_main_package: "nginx-core"
+        validation_package_fixture_name: "nginx-core"
+
+    - name: "Capture the package fixture baseline"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Verify the package fixture is initially absent"
+      ansible.builtin.assert:
+        that:
+          - validation_documented_default_package == "nginx"
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - validation_package_fixture_name not in ansible_facts.packages
+        fail_msg: >-
+          The test-only package override must differ from the documented default
+          and be absent before the check-mode test.
+
+    - name: "Exercise the production present package path in check mode"
+      ansible.builtin.include_tasks: "tasks/package_override.yml"
+      vars:
+        validation_package_state: "present"
+
+    - name: "Verify the present package path predicts an installation"
+      ansible.builtin.assert:
+        that:
+          - iac_dnf_main_package == validation_package_fixture_name
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - iac_package_operation is defined
+          - iac_package_operation.changed | bool
+          - "not (iac_package_operation.failed | default(false) | bool)"
+        fail_msg: >-
+          The production present package dispatch did not predict installing the
+          absent {{ validation_package_fixture_name }} package.
+
+    - name: "Exercise the production absent package path in check mode"
+      ansible.builtin.include_tasks: "tasks/package_override.yml"
+      vars:
+        validation_package_state: "absent"
+
+    - name: "Verify the absent package path predicts no mutation"
+      ansible.builtin.assert:
+        that:
+          - iac_dnf_main_package == validation_package_fixture_name
+          - iac_dnf_main_package != validation_documented_default_package
+          - validation_package_fixture_name == "nginx-core"
+          - iac_package_operation is defined
+          - "not (iac_package_operation.changed | bool)"
+          - "not (iac_package_operation.failed | default(false) | bool)"
+        fail_msg: >-
+          The production absent package dispatch predicted an unexpected mutation
+          for the still-absent {{ validation_package_fixture_name }} package.
+
+    - name: "Confirm check-mode package operations did not install the fixture"
+      ansible.builtin.package_facts:
+        manager: "auto"
+
+    - name: "Verify the package fixture remains absent"
+      ansible.builtin.assert:
+        that:
+          - validation_package_fixture_name not in ansible_facts.packages

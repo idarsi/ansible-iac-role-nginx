@@ -1,0 +1,37 @@
+---
+###############################################################################
+#
+# reject.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Reset the rejection observation for this case"
+  ansible.builtin.set_fact:
+    blueprint_rejected: false
+    blueprint_failure_messages: []
+
+- name: "Exercise an invalid blueprint"
+  block:
+    - name: "Validate the invalid input without state dispatch"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx: "{{ blueprint_invalid.blueprint }}"
+  rescue:
+    - name: "Record the actual validation failure"
+      ansible.builtin.set_fact:
+        blueprint_rejected: true
+        blueprint_failure_messages: >-
+          {{ [ansible_failed_result.msg | default('')] +
+          (ansible_failed_result.results | default([]) |
+          map(attribute='msg', default='') | list) }}
+
+- name: "Require rejection by the expected validator, not an unrelated error"
+  ansible.builtin.assert:
+    that:
+      - blueprint_rejected
+      - blueprint_invalid.message in blueprint_failure_messages

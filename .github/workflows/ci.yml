@@ -9,7 +9,8 @@ on:
   workflow_dispatch:
 jobs:
   checks:
-    runs-on: "ubuntu-latest"
+    # Ubuntu 26.04 rootless network teardown: https://github.com/actions/runner-images/issues/15182
+    runs-on: "ubuntu-24.04"
     steps:
       - uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" # v4.2.2
         with:
@@ -25,34 +26,139 @@ jobs:
         run: "ansible-inventory --list --inventory docs/inventory-example.yml --playbook-dir ."
       - name: "Syntax check documentation playbook example"
         run: "ANSIBLE_ROLES_PATH=.. ansible-playbook --syntax-check --inventory docs/inventory-example.yml docs/playbook-example.yml"
-      - name: "Syntax check"
-        run: "ansible-playbook --syntax-check -i localhost, -c local molecule/podman-validation/converge.yml"
+      - name: "Syntax check scenario playbooks"
+        run: |
+          for playbook in molecule/*/{prepare,converge,verify}.yml; do
+            test ! -f "$playbook" || ansible-playbook --syntax-check -i localhost, -c local "$playbook"
+          done
       - name: "Lint"
         run: "ANSIBLE_ROLES_PATH=.. ansible-lint --profile production"
-      - name: "Validation scenario"
-        run: "molecule test -s podman-validation"
-      - name: "Guardrail scenario"
-        run: "molecule test -s podman-guardrails"
-      - name: "Lifecycle scenario"
-        run: "molecule test -s podman-lifecycle"
-      - name: "Check-mode scenario"
-        run: "molecule test -s podman-check-mode"
-      - name: "Functional scenario"
-        run: "molecule test -s podman-functional"
+      - name: "Check managed CI shell with mocked backends"
+        run: "python -B -m unittest discover -s tests -p test_ci_backend_context.py -v"
+      - name: "Check package dispatch with mocked DNF"
+        run: "python -B -m unittest discover -s tests -p test_nginx_package_dispatch.py -v"
+      - name: "Checkout pinned managed helper"
+        env:
+          HELPER_SHA: "7fc510d05cfce04e6dc60d70285e8ed9eee725e5"
+        run: |
+          helper="$RUNNER_TEMP/idarsi-ansible-test-environments"
+          git init "$helper"
+          git -C "$helper" remote add origin https://github.com/idarsi/idarsi-ansible-test-environments.git
+          git -C "$helper" fetch --depth 1 origin "$HELPER_SHA"
+          git -C "$helper" checkout --detach "$HELPER_SHA"
+          echo "IDARSI_TEST_ENVIRONMENT=$helper" >> "$GITHUB_ENV"
+      - name: "Prepare disposable runner discovery prerequisites"
+        # Discovery requires both local backends; no KVM guest runs on Ubuntu.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman uidmap slirp4netns fuse-overlayfs \
+            libvirt-clients libvirt-daemon-system iproute2
+          sudo systemctl start libvirtd.socket libvirtd.service
+          sudo usermod --append --groups libvirt "$(id -un)"
+      - name: "Managed nonprivileged validation scenarios"
+        run: |
+          runner_user="$(id -un)"
+          runner_uid="$(id -u)"
+          runtime_env=()
+          if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+            runtime_env+=("XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR")
+          fi
+          sudo -n -H -u "$runner_user" -- /usr/bin/env -u XDG_RUNTIME_DIR \
+            "${runtime_env[@]}" \
+            PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            IDARSI_TEST_ENVIRONMENT="$IDARSI_TEST_ENVIRONMENT" \
+            EXPECTED_RUNNER_UID="$runner_uid" \
+            /bin/bash -Eeuo pipefail <<'SCRIPT'
+          trap 'rc=$?; printf "Managed CI failed at line %s (exit %s)\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+          printf 'Managed CI inherited umask: %s\n' "$(umask)"
+          umask 077
+          runner_uid="$(id -u)"
+          test "$runner_uid" -ne 0
+          test "$runner_uid" = "$EXPECTED_RUNNER_UID"
+          real_uid="$(id -ru)"
+          test "$real_uid" = "$runner_uid"
+          runner_passwd="$(getent passwd "$runner_uid")"
+          IFS=: read -r passwd_user _ passwd_uid passwd_gid _ passwd_home _ <<< "$runner_passwd"
+          test "$passwd_uid" = "$runner_uid"
+          runner_user="$(id -un)"
+          test "$runner_user" = "$passwd_user"
+          runner_gid="$(id -g)"
+          real_gid="$(id -rg)"
+          test "$runner_gid" = "$passwd_gid"
+          test "$real_gid" = "$passwd_gid"
+          test "$HOME" = "$passwd_home"
+          libvirt_group="$(getent group libvirt)"
+          IFS=: read -r _ _ libvirt_gid _ <<< "$libvirt_group"
+          runner_groups="$(id -G)"
+          case " $runner_groups " in
+            *" $libvirt_gid "*) ;;
+            *) false ;;
+          esac
+          id
+          podman --remote=false info
+          podman --remote=false network ls --format json
+          virsh --connect qemu:///system net-list --all
+          collection_metadata() {
+            python - "$collections" <<'METADATA'
+          import json
+          from pathlib import Path
+          import stat
+          import sys
 
-  platform-matrix:
-    if: "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
-    runs-on: "ubuntu-latest"
-    steps:
-      - uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" # v4.2.2
-        with:
-          submodules: "recursive"
-      - uses: "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" # v5.6.0
-        with:
-          python-version: "3.12"
-      - name: "Install test tools"
-        run: "python -m pip install --requirement requirements.txt"
-      - name: "Install Ansible collections"
-        run: "ansible-galaxy collection install --requirements-file requirements.yml"
-      - name: "Rocky Linux platform matrix"
-        run: "molecule test -s podman-platform-matrix"
+          collections = Path(sys.argv[1])
+          for label, path in (("scenario_ephemeral", collections.parent), ("collections", collections)):
+              record = {"label": label}
+              try:
+                  metadata = path.lstat()
+              except FileNotFoundError:
+                  record.update(status="missing", exists=False)
+              except OSError as error:
+                  record.update(status="error", errno=error.errno)
+                  print(json.dumps(record), flush=True)
+                  raise SystemExit(1) from None
+              else:
+                  kind = "directory" if stat.S_ISDIR(metadata.st_mode) else (
+                      "symlink" if stat.S_ISLNK(metadata.st_mode) else "other"
+                  )
+                  record.update(status="present", exists=True, type=kind,
+                                uid=metadata.st_uid, gid=metadata.st_gid,
+                                mode=f"{stat.S_IMODE(metadata.st_mode):04o}")
+              print(json.dumps(record), flush=True)
+          METADATA
+          }
+          for scenario in podman-rocky9-blueprint-validation podman-rocky9-validation; do
+            context="$("$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" resolve \
+              --backend podman --scenario "$scenario" --role "$PWD")"
+            collections="$(printf '%s' "$context" | python -c \
+              'import json,sys; print(json.load(sys.stdin)["collections_directory"])')"
+            collection_metadata
+            ansible-galaxy collection install --requirements-file requirements.yml \
+              --collections-path "$collections"
+            collection_metadata
+            molecule test -s "$scenario"
+          done
+          owned_containers="$(podman --remote=false ps --all --quiet \
+            --filter label=io.idarsi.test-run)"
+          owned_networks="$(podman --remote=false network ls --quiet \
+            --filter label=io.idarsi.test-run)"
+          printf 'Remaining Idarsi container IDs: %s\n' "$owned_containers"
+          printf 'Remaining Idarsi network names: %s\n' "$owned_networks"
+          test -z "$owned_containers"
+          test -z "$owned_networks"
+          # Process-name absence is valid only for this dedicated disposable runner UID.
+          if pgrep -u "$runner_uid" -x 'pasta|passt|slirp4netns'; then
+            printf 'Rootless network helper processes remain\n' >&2
+            exit 1
+          else
+            rc=$?
+            if test "$rc" -ne 1; then
+              printf 'Network helper query failed at line %s (exit %s)\n' "$LINENO" "$rc" >&2
+              exit "$rc"
+            fi
+          fi
+          SCRIPT
+      - name: "Report full-host coverage handoff"
+        run: |
+          echo "KVM guardrails/lifecycle/check-mode/functional, Rocky 9/10 matrix and SELinux: manual/pending."
+          echo "Use a provisioned supported KVM host and explicit installer sources; see TESTING.md."
+          echo "Hosted Ubuntu does not establish KVM acceptance; no software-emulation fallback."

@@ -1,0 +1,27 @@
+---
+###############################################################################
+#
+# nginx_pid_guard.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Inspect the fixed Nginx PID path without following links"
+  ansible.builtin.stat:
+    path: "/run/nginx.pid"
+    follow: false
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  register: nginx_pid_stat
+
+- name: "Require an absent or unshared regular Nginx PID file"
+  ansible.builtin.assert:
+    that:
+      - >-
+        not nginx_pid_stat.stat.exists or
+        (nginx_pid_stat.stat.isreg | default(false) and
+        not nginx_pid_stat.stat.islnk | default(false) and
+        nginx_pid_stat.stat.nlink | default(0) == 1)
+    fail_msg: "/run/nginx.pid must be absent or a regular, non-symlink file with one link; inspect the unsafe object manually."

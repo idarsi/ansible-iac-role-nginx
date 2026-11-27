@@ -1,0 +1,17 @@
+---
+###############################################################################
+# converge.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Converge a stable validation-only blueprint"
+  hosts: "all"
+  gather_facts: true
+  tasks:
+    - name: "Validate without changing the host"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            sites: []

@@ -1,0 +1,18 @@
+---
+###############################################################################
+# converge.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Converge the guardrail validation baseline"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Validate the guardrail blueprint without destructive fixtures"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+      vars:
+        state: "validate"
+        iac_blueprint:
+          nginx:
+            sites: []

@@ -1,0 +1,197 @@
+---
+###############################################################################
+# verify.yml
+# @author Arsi Atomi
+###############################################################################
+- name: "Verify check mode does not mutate managed state"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  vars:
+    check_mode_blueprint:
+      nginx:
+        files:
+          - path: "/etc/nginx/check-mode-ca.crt"
+            content: "{{ lookup('file', playbook_dir ~ '/../kvm-rocky9-functional/files/test-ca.crt') }}\n"
+            mode: "0644"
+          - path: "/var/tmp/nginx-check-mode-secret.conf"
+            content: "TEST_ONLY_SECRET_MUST_NOT_APPEAR_IN_DIFF"
+            mode: "0600"
+        sites:
+          - name: "check.example.org"
+            autoconfigure: "website"
+            ssl_certificate_type: "selfsigned"
+          - name: "check-ca.example.org"
+            autoconfigure: "proxy"
+            ssl_certificate_type: "none"
+            proxy_pass: "https://127.0.0.1:9443"
+    check_mode_paths:
+      - "/etc/nginx/nginx.conf"
+      - "/etc/nginx/sites-available/check.example.org"
+      - "/etc/nginx/sites-enabled/check.example.org"
+      - "/etc/pki/tls/private/check.example.org.key"
+      - "/var/lib/ansible-iac-role-nginx/MANAGED_BY_ROLE"
+      - "/var/lib/ansible-iac-role-nginx/manifest.yml"
+      - "/etc/nginx/check-mode-ca.crt"
+      - "/etc/nginx/sites-available/check-ca.example.org"
+      - "/etc/nginx/sites-enabled/check-ca.example.org"
+  tasks:
+    - name: "Reject an unverifiable canonical path in check mode"
+      ansible.builtin.set_fact:
+        check_mode_canonical_path_accepted: false
+        check_mode_canonical_path_rejected: false
+        check_mode_canonical_path_error_code: ""
+        check_mode_canonical_path_error_message: ""
+
+    - name: "Validate canonical path guard in check mode"
+      block:
+        - name: "Validate a root-canonicalizing path without mutation"
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir | dirname | dirname }}"
+            apply:
+              check_mode: true
+          vars:
+            state: "absent"
+            iac_blueprint:
+              nginx:
+                directories:
+                  - path: "/./."
+                sites: []
+        - name: "Record an unexpectedly accepted canonical path"
+          ansible.builtin.set_fact:
+            check_mode_canonical_path_accepted: true
+      rescue:
+        - name: "Record the expected check-mode canonical path failure"
+          ansible.builtin.set_fact:
+            check_mode_canonical_path_rejected: true
+            check_mode_canonical_path_error_code: "{{ nginx_validation_error_code | default('') }}"
+            check_mode_canonical_path_error_message: "{{ ansible_failed_result | to_nice_json }}"
+
+    - name: "Verify check mode rejects the canonical path"
+      ansible.builtin.assert:
+        that:
+          - "check_mode_canonical_path_accepted is false"
+          - "check_mode_canonical_path_rejected is true"
+          - "check_mode_canonical_path_error_code == 'CANONICAL_PATH_PROTECTED_ROOT'"
+          - >-
+            'A managed filesystem path resolves to a protected system root.' in
+            check_mode_canonical_path_error_message
+          - >-
+            'Canonical path validation could not be verified.' in
+            check_mode_canonical_path_error_message
+        fail_msg: "Check mode must reject canonical paths and report the canonical path guard error."
+
+    - name: "Capture installed package facts before check mode"
+      ansible.builtin.package_facts:
+        manager: "auto"
+      register: check_mode_packages_before
+
+    - name: "Provide the existing check-mode proxy source fixture"
+      ansible.builtin.copy:
+        dest: "/etc/nginx/sites-available/check-ca.example.org"
+        content: "# Existing test-only source; check mode must not replace it.\n"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+
+    - name: "Capture managed files before check mode"
+      ansible.builtin.stat:
+        path: "{{ check_mode_path }}"
+        checksum_algorithm: "sha256"
+      loop: "{{ check_mode_paths }}"
+      loop_control:
+        loop_var: "check_mode_path"
+      register: check_mode_before
+
+    - name: "Capture the repository path before check mode"
+      ansible.builtin.stat:
+        path: "/etc/yum.repos.d/nginx.repo"
+        checksum_algorithm: "sha256"
+      register: check_mode_repo_before
+
+    - name: "Capture repository content before check mode when present"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      when: check_mode_repo_before.stat.exists
+      register: check_mode_repo_content_before
+
+    - name: "Capture service state before check mode"
+      ansible.builtin.service_facts:
+      register: check_mode_service_before
+
+    - name: "Run the representative convergence in check and diff mode"
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname | dirname }}"
+        apply:
+          check_mode: true
+          diff: true
+      vars:
+        state: "install"
+        nginx_proxy_ssl_trusted_certificate: "/etc/nginx/check-mode-ca.crt"
+        iac_blueprint: "{{ check_mode_blueprint }}"
+
+    - name: "Capture managed files after check mode"
+      ansible.builtin.stat:
+        path: "{{ check_mode_path }}"
+        checksum_algorithm: "sha256"
+      loop: "{{ check_mode_paths }}"
+      loop_control:
+        loop_var: "check_mode_path"
+      register: check_mode_after
+
+    - name: "Capture the repository path after check mode"
+      ansible.builtin.stat:
+        path: "/etc/yum.repos.d/nginx.repo"
+        checksum_algorithm: "sha256"
+      register: check_mode_repo_after
+
+    - name: "Capture repository content after check mode when present"
+      ansible.builtin.slurp:
+        src: "/etc/yum.repos.d/nginx.repo"
+      when: check_mode_repo_after.stat.exists
+      register: check_mode_repo_content_after
+
+    - name: "Capture service state after check mode"
+      ansible.builtin.service_facts:
+      register: check_mode_service_after
+
+    - name: "Capture installed package facts after check mode"
+      ansible.builtin.package_facts:
+        manager: "auto"
+      register: check_mode_packages_after
+
+    - name: "Verify check mode did not change managed files or service state"
+      ansible.builtin.assert:
+        that:
+          - >-
+            check_mode_before.results | map(attribute="stat.exists", default=false) | list ==
+            check_mode_after.results | map(attribute="stat.exists", default=false) | list
+          - >-
+            check_mode_before.results | map(attribute="stat.checksum", default="") | list ==
+            check_mode_after.results | map(attribute="stat.checksum", default="") | list
+          - >-
+            check_mode_before.results | map(attribute="stat.mode", default="") | list ==
+            check_mode_after.results | map(attribute="stat.mode", default="") | list
+          - >-
+            check_mode_before.results | map(attribute="stat.pw_name", default="") | list ==
+            check_mode_after.results | map(attribute="stat.pw_name", default="") | list
+          - >-
+           check_mode_before.results | map(attribute="stat.gr_name", default="") | list ==
+            check_mode_after.results | map(attribute="stat.gr_name", default="") | list
+          - "check_mode_repo_before.stat.exists == check_mode_repo_after.stat.exists"
+          - "not check_mode_repo_after.stat.exists"
+          - >-
+            (check_mode_repo_before.stat.exists | ternary(
+              check_mode_repo_content_before.content | default(""), "")) ==
+            (check_mode_repo_after.stat.exists | ternary(
+              check_mode_repo_content_after.content | default(""), ""))
+          - "('nginx' in check_mode_packages_before.ansible_facts.packages) == ('nginx' in check_mode_packages_after.ansible_facts.packages)"
+          - >-
+            ("dnf-plugins-core" in check_mode_packages_before.ansible_facts.packages) ==
+            ("dnf-plugins-core" in check_mode_packages_after.ansible_facts.packages)
+          - >-
+            check_mode_service_before.ansible_facts.services.get('nginx.service', {}).get('state', 'absent') ==
+            check_mode_service_after.ansible_facts.services.get('nginx.service', {}).get('state', 'absent')
+          - >-
+            check_mode_service_before.ansible_facts.services.get('nginx.service', {}).get('status', 'absent') ==
+            check_mode_service_after.ansible_facts.services.get('nginx.service', {}).get('status', 'absent')

@@ -1,0 +1,41 @@
+---
+###############################################################################
+#
+# prepare.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+- name: "Prepare SELinux for the disposable functional proxy fixture"
+  hosts: "all"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: "Require the functional guest to retain enforcing SELinux"
+      ansible.builtin.assert:
+        that:
+          - "ansible_facts.selinux.status == 'enabled'"
+          - "ansible_facts.selinux.mode == 'enforcing'"
+
+    - name: "Install Rocky SELinux policy and Python module prerequisites"
+      ansible.builtin.dnf:
+        name:
+          - "selinux-policy-targeted"
+          - "policycoreutils-python-utils"
+          - "python3-libselinux"
+          - "python3-libsemanage"
+        state: "present"
+
+    - name: "Persist network connections for the guest-only proxy fixture"
+      ansible.posix.seboolean:
+        name: "httpd_can_network_connect"
+        state: true
+        persistent: true
+
+    # Persistent policy may already be correct while active state has drifted.
+    - name: "Ensure the proxy fixture boolean is active now"
+      ansible.posix.seboolean:
+        name: "httpd_can_network_connect"
+        state: true
+        persistent: false
