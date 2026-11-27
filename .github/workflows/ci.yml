@@ -54,14 +54,41 @@ jobs:
           sudo usermod --append --groups libvirt "$(id -un)"
       - name: "Managed nonprivileged validation scenarios"
         run: |
-          sg libvirt -c 'bash -Eeuo pipefail' <<'SCRIPT'
+          runner_user="$(id -un)"
+          runner_uid="$(id -u)"
+          runtime_env=()
+          if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+            runtime_env+=("XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR")
+          fi
+          sudo -n -H -u "$runner_user" -- /usr/bin/env -u XDG_RUNTIME_DIR \
+            "${runtime_env[@]}" \
+            PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            IDARSI_TEST_ENVIRONMENT="$IDARSI_TEST_ENVIRONMENT" \
+            EXPECTED_RUNNER_UID="$runner_uid" \
+            /bin/bash -Eeuo pipefail <<'SCRIPT'
           trap 'rc=$?; printf "Managed CI failed at line %s (exit %s)\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
           runner_uid="$(id -u)"
           test "$runner_uid" -ne 0
+          test "$runner_uid" = "$EXPECTED_RUNNER_UID"
+          real_uid="$(id -ru)"
+          test "$real_uid" = "$runner_uid"
+          runner_passwd="$(getent passwd "$runner_uid")"
+          IFS=: read -r passwd_user _ passwd_uid passwd_gid _ passwd_home _ <<< "$runner_passwd"
+          test "$passwd_uid" = "$runner_uid"
+          runner_user="$(id -un)"
+          test "$runner_user" = "$passwd_user"
+          runner_gid="$(id -g)"
+          real_gid="$(id -rg)"
+          test "$runner_gid" = "$passwd_gid"
+          test "$real_gid" = "$passwd_gid"
+          test "$HOME" = "$passwd_home"
           libvirt_group="$(getent group libvirt)"
           IFS=: read -r _ _ libvirt_gid _ <<< "$libvirt_group"
-          runner_gid="$(id -g)"
-          test "$runner_gid" = "$libvirt_gid"
+          runner_groups="$(id -G)"
+          case " $runner_groups " in
+            *" $libvirt_gid "*) ;;
+            *) false ;;
+          esac
           id
           podman --remote=false info
           podman --remote=false network ls --format json

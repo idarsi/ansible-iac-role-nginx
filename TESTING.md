@@ -383,8 +383,16 @@ its disposable Ubuntu runner and runs the two nonprivileged managed Podman
 scenarios as the unprivileged runner. Collections are installed into resolved
 per-context directories. All Podman initialization, Podman/libvirt discovery,
 context resolution, private collection installation and both complete
-`molecule test` lifecycles run inside one `sg libvirt` shell, with the same
-nonroot UID and libvirt primary GID. The shell asserts those credentials,
+`molecule test` lifecycles run inside one same-user `sudo -n -H -u` shell,
+refreshing supplementary libvirt membership without changing the runner's
+passwd primary GID. No login shell or preserved-group option is used.
+An explicit post-drop environment allowlist retains setup-python's `PATH` and
+`LD_LIBRARY_PATH`, the helper path and expected runner UID. `XDG_RUNTIME_DIR`
+is retained only when nonempty in the outer runner environment; otherwise it
+is explicitly unset, leaving Podman's ordinary runtime-directory selection
+unchanged. No runtime directory is created or required before Podman starts.
+The shell asserts nonroot real/effective UID, passwd primary real/effective
+GID, passwd username/HOME and exact numeric supplementary libvirt membership,
 prints runner identity and local discovery, and reports the original failure
 status and shell line without retries, recovery or ignored destroy errors.
 The existing privileged package/service/group setup remains separate and
@@ -408,17 +416,32 @@ reported Ubuntu 26.04.1, kernel 7, Podman 5.7.0, netavark 1.16.1,
 aardvark-dns 1.16.0 and pasta (not slirp). Podman initialization previously
 ran before `sg libvirt`, while lifecycle execution ran inside it. A primary-GID
 context mismatch is plausible; neither a kernel regression nor the precise
-PID-file-read versus process-kill failure is established. The focused workflow
-correction keeps initialization and lifecycles in one credential context;
+PID-file-read versus process-kill failure is established. The first workflow
+correction moved initialization and lifecycles into one `sg libvirt` context;
 it does not repair that failed runner's retained state. Fresh hosted CI
 acceptance remains pending.
 
+Run [`45979780346`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45979780346)
+at role `06d5789ae062a3cda58511c4b9ca748333624a9a` failed at initial
+`podman --remote=false info` before any scenario (exit 125). The runner had
+UID 1001 and primary GID 980 (`libvirt`), but passwd primary GID 1001.
+`newuidmap` rejected the target process ownership with the mismatched GID.
+This proves that the `sg` primary-GID change is unsuitable for this runner's
+rootless initialization. The follow-up refreshes supplementary groups using
+same-user sudo while retaining the passwd primary GID and one consistent
+backend context. It does not prove the original final-destroy error resolved;
+fresh hosted lifecycle/cleanup acceptance remains pending.
+
 The host-free regression extracts the actual managed-step shell from workflow
-YAML. A temporary allowlisted PATH mocks `sg`, identity lookup, Podman, virsh,
+YAML. A temporary allowlisted PATH mocks `sudo`, identity lookup, Podman, virsh,
 the helper, JSON parsing, collection installation and Molecule; unknown commands
 fail closed. It never executes the prerequisite step or a real backend.
 It checks initialization/discovery and both full scenario commands in order,
 and original nonzero status/no subsequent calls on each boundary failure.
+It rejects wrong real/effective UID/GID, the former `sg` primary GID even with
+valid libvirt membership, incorrect username/HOME, missing supplementary groups
+and substring-only group matches before discovery. Runtime-directory environment
+tests cover both explicit preservation and absence without directory creation.
 CI runs it before backend setup. From an existing approved controller
 environment (existing PyYAML plus Python standard library only):
 

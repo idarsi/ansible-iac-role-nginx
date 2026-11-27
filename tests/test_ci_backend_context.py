@@ -32,12 +32,41 @@ import sys
 
 name, args = Path(sys.argv[0]).name, sys.argv[1:]
 inside = os.environ.get("MOCK_INSIDE") == "yes"
-if name == "sg":
+if name == "sudo":
     assert not inside
-    assert args == ["libvirt", "-c", "bash -Eeuo pipefail"], args
+    assert args[:8] == [
+        "-n", "-H", "-u", "runner", "--", "/usr/bin/env", "-u", "XDG_RUNTIME_DIR"
+    ], args
+    assignments = (["XDG_RUNTIME_DIR=" + os.environ["XDG_RUNTIME_DIR"]]
+                   if os.environ.get("XDG_RUNTIME_DIR") else [])
+    assignments += [
+        "PATH=" + os.environ["PATH"],
+        "LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"],
+        "IDARSI_TEST_ENVIRONMENT=" + os.environ["IDARSI_TEST_ENVIRONMENT"],
+        "EXPECTED_RUNNER_UID=1001",
+    ]
+    assert args[8:] == assignments + ["/bin/bash", "-Eeuo", "pipefail"], args
+    os.environ.pop("XDG_RUNTIME_DIR", None)
+    for assignment in assignments:
+        key, value = assignment.split("=", 1)
+        os.environ[key] = value
     os.environ["MOCK_INSIDE"] = "yes"
+    os.environ["HOME"] = os.environ["MOCK_HOME"]
     sys.exit(subprocess.run(["/bin/bash", "-Eeuo", "pipefail"]).returncode)
+if not inside and name == "id":
+    assert args in (["-un"], ["-u"]), args
+    print("runner" if args == ["-un"] else "1001")
+    sys.exit(0)
 assert inside, f"{name} called outside credential wrapper"
+if name in ("podman", "virsh", "scenario-context", "ansible-galaxy", "molecule"):
+    assert os.environ["MOCK_UID"] == os.environ["MOCK_REAL_UID"] == "1001"
+    assert os.environ["MOCK_GID"] == os.environ["MOCK_REAL_GID"] == "1001"
+    assert "980" in os.environ["MOCK_GROUPS"].split()
+    assert os.environ["HOME"] == "/mock/runner"
+    assert os.environ.get("XDG_RUNTIME_DIR") == (
+        os.environ["MOCK_XDG"] or None
+    )
+    assert os.environ["LD_LIBRARY_PATH"] == "/mock/python libraries"
 event = name + " " + " ".join(args)
 with open(os.environ["MOCK_LOG"], "a") as stream:
     stream.write(json.dumps(event) + "\n")
@@ -46,13 +75,18 @@ if len(Path(os.environ["MOCK_LOG"]).read_text().splitlines()) == int(
 ):
     sys.exit(37)
 if name == "id":
-    assert args in ([], ["-u"], ["-g"]), args
+    assert args in ([], ["-un"], ["-u"], ["-ru"], ["-g"], ["-rg"], ["-G"]), args
     print(os.environ["MOCK_UID"] if args == ["-u"]
+          else os.environ["MOCK_REAL_UID"] if args == ["-ru"]
           else os.environ["MOCK_GID"] if args == ["-g"]
-          else "uid=1001(runner) gid=108(libvirt)")
+          else os.environ["MOCK_REAL_GID"] if args == ["-rg"]
+          else os.environ["MOCK_GROUPS"] if args == ["-G"]
+          else os.environ["MOCK_NAME"] if args == ["-un"]
+          else "uid=1001(runner) gid=1001(runner) groups=1001,980(libvirt)")
 elif name == "getent":
-    assert args == ["group", "libvirt"], args
-    print("libvirt:x:108:runner")
+    assert args in (["group", "libvirt"], ["passwd", os.environ["MOCK_UID"]]), args
+    print("libvirt:x:980:runner" if args[0] == "group"
+          else "runner:x:1001:1001::/mock/runner:/bin/bash")
 elif name == "podman":
     assert args in (["--remote=false", "info"],
                     ["--remote=false", "network", "ls", "--format", "json"]), args
@@ -86,18 +120,21 @@ class BackendContextTests(unittest.TestCase):
     """Check credential consistency, order and original failure propagation."""
 
     def run_script(
-        self, failure: int = 0, uid: str = "1001", gid: str = "108"
+        self, failure: int = 0, uid: str = "1001", gid: str = "1001",
+        groups: str = "1001 980", name: str = "runner",
+        real_uid: str = "1001", real_gid: str = "1001",
+        home: str = "/mock/runner", xdg: str = "",
     ) -> tuple[subprocess.CompletedProcess, list]:
         """Run only the extracted managed step with an isolated fake PATH."""
-        with tempfile.TemporaryDirectory(prefix="nginx-ci-mock-") as directory:
+        with tempfile.TemporaryDirectory(prefix="nginx-ci-mock ' $-") as directory:
             base = Path(directory)
             (base / "bash").symlink_to("/bin/bash")
             (base / "scripts").mkdir()
-            for name in (
-                "sg", "id", "getent", "podman", "virsh", "scenario-context",
+            for command_name in (
+                "sudo", "id", "getent", "podman", "virsh", "scenario-context",
                 "python", "ansible-galaxy", "molecule",
             ):
-                executable = base / name
+                executable = base / command_name
                 executable.write_text(f"#!{sys.executable}\n{MOCK}")
                 executable.chmod(0o700)
             (base / "scripts/scenario-context").symlink_to(base / "scenario-context")
@@ -107,12 +144,20 @@ class BackendContextTests(unittest.TestCase):
                 ["/bin/bash", "-Eeuo", "pipefail", "-c", SCRIPT],
                 cwd=ROOT,
                 env={
+                    **({"XDG_RUNTIME_DIR": xdg} if xdg else {}),
                     "PATH": directory,
                     "IDARSI_TEST_ENVIRONMENT": directory,
+                    "LD_LIBRARY_PATH": "/mock/python libraries",
                     "MOCK_LOG": str(log),
                     "MOCK_FAIL_AT": str(failure),
                     "MOCK_UID": uid,
                     "MOCK_GID": gid,
+                    "MOCK_GROUPS": groups,
+                    "MOCK_NAME": name,
+                    "MOCK_REAL_UID": real_uid,
+                    "MOCK_REAL_GID": real_gid,
+                    "MOCK_HOME": home,
+                    "MOCK_XDG": xdg,
                 },
                 capture_output=True,
                 text=True,
@@ -134,7 +179,9 @@ class BackendContextTests(unittest.TestCase):
     def test_success_and_fail_fast_at_each_boundary(self):
         result, calls = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
-        expected = ["id -u", "getent group libvirt", "id -g", "id ",
+        expected = ["id -u", "id -ru", "getent passwd 1001", "id -un",
+                    "id -g", "id -rg",
+                    "getent group libvirt", "id -G", "id ",
                     "podman --remote=false info",
                     "podman --remote=false network ls --format json",
                     "virsh --connect qemu:///system net-list --all"]
@@ -159,16 +206,32 @@ class BackendContextTests(unittest.TestCase):
                 self.assertIn("exit 37", result.stderr)
                 self.assertRegex(result.stderr, r"line [0-9]+")
 
-    def test_root_and_wrong_primary_group_rejected_before_discovery(self):
-        for uid, gid, expected in (
-            ("0", "108", ["id -u"]),
-            ("1001", "1001", ["id -u", "getent group libvirt", "id -g"]),
+    def test_invalid_credentials_rejected_before_discovery(self):
+        identity = ["id -u", "id -ru", "getent passwd 1001", "id -un",
+                    "id -g", "id -rg"]
+        membership = identity + ["getent group libvirt", "id -G"]
+        for overrides, expected in (
+            ({"uid": "0"}, ["id -u"]),
+            ({"uid": "1002"}, ["id -u"]),
+            ({"real_uid": "0"}, ["id -u", "id -ru"]),
+            ({"name": "other"}, identity[:4]),
+            # Old sg primary GID fails even with valid libvirt membership.
+            ({"gid": "980", "real_gid": "980"}, identity),
+            ({"real_gid": "980"}, identity),
+            ({"home": "/root"}, identity),
+            ({"groups": "1001"}, membership),
+            # A substring is not numeric supplementary membership.
+            ({"groups": "1001 1980"}, membership),
         ):
-            with self.subTest(uid=uid, gid=gid):
-                result, calls = self.run_script(uid=uid, gid=gid)
+            with self.subTest(overrides=overrides):
+                result, calls = self.run_script(**overrides)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertEqual(calls, expected)
                 self.assertIn("exit 1", result.stderr)
+
+    def test_explicit_runtime_directory_preserved_without_creating_one(self):
+        result, _ = self.run_script(xdg="/mock/existing runner runtime")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

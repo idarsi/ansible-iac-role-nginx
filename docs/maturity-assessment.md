@@ -79,6 +79,22 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+Supplementary-group refresh reassessment (2026-11-27): assessed ref is the
+working tree after `06d5789ae062a3cda58511c4b9ca748333624a9a` on
+`update/optional-managed-molecule`. Hosted run
+[`45979780346`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45979780346)
+failed initial local Podman info before any scenario (exit 125): `newuidmap`
+rejected process primary GID 980 against passwd GID 1001. This confirms the
+`sg libvirt` primary-GID change broke rootless initialization, not that the
+earlier final-destroy error's cause was established. Same-user sudo now refreshes
+supplementary membership while preserving passwd primary GID, nonroot identity,
+HOME and explicitly allowlisted controller environment. Source/mock checks
+cover credential rejection, runtime environment preservation/absence and
+fail-fast behavior, not backend cleanup acceptance. Fresh hosted CI remains
+pending. All criterion scores and category subtotals are unchanged, including
+CI enforcement **0/1**: **66.5/100 → 66%, Beta**. Failing CI and existing
+runtime/support gaps retain the Beta cap; no production approval is claimed.
+
 CI credential-context reassessment (2026-11-27): assessed ref is the working
 tree after `a1b5b8a3e520679db29c847e8a56c7c51aed4cdb` on
 `update/optional-managed-molecule`. Hosted run
