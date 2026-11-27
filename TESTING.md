@@ -151,10 +151,10 @@ Metadata is test intent, not runtime proof.
 | Scenario | Backend / target | Literal platform names | Coverage intent |
 | --- | --- | --- | --- |
 | `podman-rocky9-blueprint-validation` | Nonprivileged Podman / Rocky 9 UBI init | `nginx-blueprint-validation-rocky9` | Pure validation, exact rejection errors, RPM/path/sentinel nonmutation |
-| `podman-rocky9-validation` | Nonprivileged Podman / Rocky 9 UBI init | `nginx-validation-rocky9` | Broader validation, package overrides in check mode, path/security/logging regressions |
+| `podman-rocky9-validation` | Nonprivileged Podman / Rocky 9 UBI init | `nginx-validation-rocky9` | Broader validation and path/security/logging regressions; package bindings covered by native mocked CI |
 | `kvm-rocky9-guardrails` | KVM / Rocky 9 | `nginx-guardrails-rocky9` | Confirmation, ownership filtering, external-file preservation, corrupt-manifest/wrong-marker rejection |
 | `kvm-rocky9-lifecycle` | KVM / Rocky 9 | `nginx-lifecycle-rocky9` | Public transitions, handler reload count, service enablement, observable repeat convergence |
-| `kvm-rocky9-check-mode` | KVM / Rocky 9 | `nginx-check-mode-rocky9` | Check+diff package/service/file/repository nonmutation and secret handling |
+| `kvm-rocky9-check-mode` | KVM / Rocky 9 | `nginx-check-mode-rocky9` | Real package-override solver checks in prepare, then check+diff package/service/file/repository nonmutation and secret handling |
 | `kvm-rocky9-functional` | KVM / Rocky 9 | `nginx-functional-rocky9` | TLS/redirect, local reverse proxy, managed CA, repository defaults and key modes |
 | `kvm-rocky9-rocky10-platform-matrix` | KVM / Rocky 9 **and** 10 | `nginx-platform-matrix-rocky9`, `nginx-platform-matrix-rocky10` | Installation, `nginx -t`, enabled site, service behavior and idempotence on both OS versions |
 | `kvm-rocky10-selinux` | KVM / Rocky 10 enforcing | `nginx-selinux-kvm-rocky10` | Policy persistence, role-managed content label, HTTP content access and idempotence |
@@ -180,9 +180,10 @@ incompatible and not a newly imposed role minimum.
   proxy access-order/auth/CA, cron, source-code logging and handler assertions.
   `converge` now validates a stable blueprint on every invocation. Its original
   regression playbook runs from `verify`, followed by the original package,
-  service and filesystem nonmutation assertions. The absent `nginx-core`
-  fixture still predicts a change in check mode; it is not installed merely to
-  hide that change. The custom repository rendering does not contact a repository.
+  service and filesystem nonmutation assertions. Real DNF package-override
+  checks now belong to KVM preparation; hosted CI retains native-engine argument
+  and control-flow checks with DNF alone mocked. The custom repository rendering
+  does not contact a repository.
 * Guardrails likewise converge a validation baseline on every invocation;
   verification runs the complete destructive regression playbook and persisted
   result assertions. It preserves external repository/site/unrelated nested
@@ -201,6 +202,11 @@ incompatible and not a newly imposed role minimum.
   lifecycle handler fixture. Secret-bearing fixtures retain `no_log`/diff
   safeguards. Command-based key generation and repository/package operations
   retain their documented check-mode limits.
+  Check-mode's new `prepare.yml` runs the unchanged package-override fixture and
+  all its original baseline/result/nonmutation assertions before installation.
+  It requires the distinct `nginx-core` fixture initially absent, predicts
+  installation for present and no change for absent, and verifies it remains
+  absent; it never removes packages to manufacture that premise.
 * Full-host cases no longer request privileged containers or host cgroup mounts.
   KVM guest plays use `become: true` for the nonroot `molecule` SSH account.
   The SELinux scenario retains its enforcing precondition,
@@ -478,6 +484,47 @@ or performed. Installation remains private to the resolved context, with
 existing helper locking and `driver.safe_files` unchanged.
 Fresh hosted acceptance remains pending. This early refusal does **not**
 verify the Ubuntu 24.04 teardown workaround or provide cleanup/runtime credit.
+
+Run [`45988385250`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45988385250)
+at role `8d84ff8bb79823001944f0036fc606de99fdab8a` passed the blueprint
+scenario's full lifecycle. The broader validation scenario passed create,
+converge and idempotence, then failed verify because real DNF check-mode
+metadata resolution could not resolve Rocky BaseOS mirrors (Curl error 6),
+before the package-binding assertions. Automatic destroy passed; the final
+absence gates were not reached. The DNS failure's cause remains unknown:
+the pinned helper creates an ordinary labelled subnet/gateway network without
+`--internal`, not an intentionally internal network.
+
+Check mode does not make a real DNF solver offline. The entire two-state
+package-override block and helper therefore move from Podman verification to
+`kvm-rocky9-check-mode` preparation, where real package/repository behavior
+belongs. Existing KVM converge/verify behavior remains unchanged. Actual
+current-controller KVM acceptance of that new preparation and replacement
+hosted Podman acceptance remain pending; historical KVM passes do not transfer.
+No network/DNS policy or role implementation change is justified by this error.
+
+Hosted CI now requires this portable native-engine regression:
+
+```bash
+python -B -m unittest discover -s tests -p test_nginx_package_dispatch.py -v
+```
+
+It copies unchanged production dispatch/present/absent and logging includes into
+temporary fixtures, runs Ansible's CLI using the active `sys.executable`, and
+intercepts only DNF actions. A fail-closed connection plugin rejects all host
+connections, commands and transfers. Native include/assert/register/check-mode
+semantics verify both states, a distinct override's exact secure DNF arguments,
+invalid-state rejection, injected DNF failures and a hardcoded-default negative
+control. This proves bindings/control flow, not package availability, solver
+behavior or nonmutation on a guest.
+
+The escaping-source symlink fixture is also corrected to create and clean up
+on the controller checkout (`delegate_to: localhost`, `become: false`), where
+the role's realpath validation reads it, rather than an unmounted guest path.
+A pre-block non-following stat/assert refuses a pre-existing fixture; the
+original rejection/rescue and unconditional `always` cleanup are retained.
+Cheap source assertions cover placement/cleanup without creating a controller
+checkout fixture. Unsafe-CA and other negative validation assertions remain.
 
 After both full scenarios succeed, the same nonroot shell performs read-only
 absence checks for containers and networks with the pinned helper's exact

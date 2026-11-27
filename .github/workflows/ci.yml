@@ -35,6 +35,8 @@ jobs:
         run: "ANSIBLE_ROLES_PATH=.. ansible-lint --profile production"
       - name: "Check managed CI shell with mocked backends"
         run: "python -B -m unittest discover -s tests -p test_ci_backend_context.py -v"
+      - name: "Check package dispatch with mocked DNF"
+        run: "python -B -m unittest discover -s tests -p test_nginx_package_dispatch.py -v"
       - name: "Checkout pinned managed helper"
         env:
           HELPER_SHA: "7fc510d05cfce04e6dc60d70285e8ed9eee725e5"

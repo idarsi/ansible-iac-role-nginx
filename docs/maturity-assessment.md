@@ -79,6 +79,26 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+Test-responsibility reassessment (2026-11-27): assessed ref is the working tree
+after `8d84ff8bb79823001944f0036fc606de99fdab8a` on
+`update/optional-managed-molecule`. Run
+[`45988385250`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45988385250)
+passed the blueprint full lifecycle and broader validation create/converge/
+idempotence, then failed verification on a real check-mode DNF metadata DNS
+lookup (Curl 6). Automatic destroy passed; final absence gates were not reached.
+The DNS cause is unknown; the pinned helper network is not `--internal`.
+Real two-state package-override solver coverage and all assertions now run in
+KVM check-mode preparation, retaining the absent-fixture premise. Required
+hosted native-engine mocks cover unchanged production argument/control flow,
+not real package/runtime acceptance. Controller symlink fixture creation and
+always-cleanup are delegated to the actual checkout, with a pre-existing-path
+guard; production validation and other security assertions are unchanged.
+Both updated Podman acceptance and affected KVM preparation acceptance remain
+pending, with no transfer of historical passes or new runtime credit. All
+criterion/category scores remain unchanged: CI enforcement **0/1**,
+**66.5/100 → 66%, Beta**. Failing CI and existing runtime/support gaps retain
+the Beta cap; no RC or production approval is claimed.
+
 Private-context creation reassessment (2026-11-27): assessed ref is the
 working tree after `e34900ef754c1cda638b24eb7290d9625fb1448c` on
 `update/optional-managed-molecule`. Run

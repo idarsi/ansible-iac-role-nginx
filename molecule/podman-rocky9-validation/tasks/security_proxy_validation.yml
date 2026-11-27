@@ -1,4 +1,9 @@
 ---
+###############################################################################
+# security_proxy_validation.yml
+# @author Arsi Atomi
+###############################################################################
+
 - name: "Accept a boolean false site proxy SSL override"
   ansible.builtin.include_role:
     name: "{{ playbook_dir | dirname | dirname }}"
@@ -289,6 +294,20 @@
                 proxy_set_header:
                   - 'X-Test "value "'
 
+- name: "Inspect the controller escaping-source fixture path"
+  ansible.builtin.stat:
+    path: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
+    follow: false
+  delegate_to: "localhost"
+  become: false
+  register: security_validation_escape_fixture
+
+- name: "Require an unused controller escaping-source fixture path"
+  ansible.builtin.assert:
+    that:
+      - not security_validation_escape_fixture.stat.exists
+    fail_msg: "The controller escaping-source fixture path must not pre-exist."
+
 - name: "Reject a role files symlink that resolves outside files"
   block:
     - name: "Create a symlink escaping the role files directory"
@@ -296,6 +315,8 @@
         path: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
         src: "/etc/passwd"
         state: "link"
+      delegate_to: "localhost"
+      become: false
 
     - name: "Validate the escaping relative source"
       ansible.builtin.include_role:
@@ -318,6 +339,8 @@
       ansible.builtin.file:
         path: "{{ playbook_dir | dirname | dirname }}/files/nginx-validation-escape.conf"
         state: "absent"
+      delegate_to: "localhost"
+      become: false
 
 - name: "Render a quoted proxy_set_header value with trailing whitespace"
   ansible.builtin.set_fact:
