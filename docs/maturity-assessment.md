@@ -79,6 +79,25 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+Private-context creation reassessment (2026-11-27): assessed ref is the
+working tree after `e34900ef754c1cda638b24eb7290d9625fb1448c` on
+`update/optional-managed-molecule`. Run
+[`45986450582`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45986450582)
+reached Galaxy's nothing-to-do result, then initial destroy rejected an unsafe
+collections destination before resources were created. Published-helper
+ownership/type/write-bit checks and Core 2.21.3's output-directory creation
+identify a high-confidence caller-umask mechanism, but the historical directory
+mode and caller umask were not captured. The target-user shell now sets `077`
+before all context/bootstrap/lifecycle work; bounded metadata diagnostics
+observe only the resolved ephemeral parent and collections object before/after
+bootstrap. No existing permissions are repaired or guard weakened. Source mocks
+cover inherited masks and real disposable fixture metadata, not hosted runtime.
+Fresh CI acceptance remains pending; this early refusal did not verify the
+Ubuntu 24.04 network teardown workaround. All criterion scores/category totals
+remain unchanged: CI enforcement **0/1**, **66.5/100 → 66%, Beta**. Existing
+runtime/support gaps and failing CI retain the Beta cap; no production approval
+is claimed.
+
 Hosted-image compatibility reassessment (2026-11-27): assessed ref is the
 working tree after `46073c0e199acdd4957659d68e15ec6a17289780` on
 `update/optional-managed-molecule`. Run

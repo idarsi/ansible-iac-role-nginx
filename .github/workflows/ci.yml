@@ -68,6 +68,8 @@ jobs:
             EXPECTED_RUNNER_UID="$runner_uid" \
             /bin/bash -Eeuo pipefail <<'SCRIPT'
           trap 'rc=$?; printf "Managed CI failed at line %s (exit %s)\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+          printf 'Managed CI inherited umask: %s\n' "$(umask)"
+          umask 077
           runner_uid="$(id -u)"
           test "$runner_uid" -ne 0
           test "$runner_uid" = "$EXPECTED_RUNNER_UID"
@@ -94,13 +96,43 @@ jobs:
           podman --remote=false info
           podman --remote=false network ls --format json
           virsh --connect qemu:///system net-list --all
+          collection_metadata() {
+            python - "$collections" <<'METADATA'
+          import json
+          from pathlib import Path
+          import stat
+          import sys
+
+          collections = Path(sys.argv[1])
+          for label, path in (("scenario_ephemeral", collections.parent), ("collections", collections)):
+              record = {"label": label}
+              try:
+                  metadata = path.lstat()
+              except FileNotFoundError:
+                  record.update(status="missing", exists=False)
+              except OSError as error:
+                  record.update(status="error", errno=error.errno)
+                  print(json.dumps(record), flush=True)
+                  raise SystemExit(1) from None
+              else:
+                  kind = "directory" if stat.S_ISDIR(metadata.st_mode) else (
+                      "symlink" if stat.S_ISLNK(metadata.st_mode) else "other"
+                  )
+                  record.update(status="present", exists=True, type=kind,
+                                uid=metadata.st_uid, gid=metadata.st_gid,
+                                mode=f"{stat.S_IMODE(metadata.st_mode):04o}")
+              print(json.dumps(record), flush=True)
+          METADATA
+          }
           for scenario in podman-rocky9-blueprint-validation podman-rocky9-validation; do
             context="$("$IDARSI_TEST_ENVIRONMENT/scripts/scenario-context" resolve \
               --backend podman --scenario "$scenario" --role "$PWD")"
             collections="$(printf '%s' "$context" | python -c \
               'import json,sys; print(json.load(sys.stdin)["collections_directory"])')"
+            collection_metadata
             ansible-galaxy collection install --requirements-file requirements.yml \
               --collections-path "$collections"
+            collection_metadata
             molecule test -s "$scenario"
           done
           owned_containers="$(podman --remote=false ps --all --quiet \

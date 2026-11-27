@@ -391,6 +391,10 @@ An explicit post-drop environment allowlist retains setup-python's `PATH` and
 is retained only when nonempty in the outer runner environment; otherwise it
 is explicitly unset, leaving Podman's ordinary runtime-directory selection
 unchanged. No runtime directory is created or required before Podman starts.
+Inside that target-user shell, the inherited umask is logged and then set to
+`077` before backend readiness, helper resolution, collection bootstrap or
+Molecule. This governs new private-context directories; it does not repair
+existing permissions or relax the helper's ownership/mode checks.
 The shell asserts nonroot real/effective UID, passwd primary real/effective
 GID, passwd username/HOME and exact numeric supplementary libvirt membership,
 prints runner identity and local discovery, and reports the original failure
@@ -450,6 +454,31 @@ override is applied here. Ubuntu 24.04's current image inventory has Podman
 can also be 7; this is not a kernel-7 avoidance claim or a package-version pin.
 Fresh hosted acceptance of the new baseline remains pending.
 
+Run [`45986450582`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45986450582)
+at role `e34900ef754c1cda638b24eb7290d9625fb1448c` reached resolved private
+collection bootstrap on Ubuntu 24.04; Galaxy reported nothing to do, then
+Molecule's initial destroy failed with `Unsafe Molecule collection destination`
+before resources were created. The published helper checks existing ephemeral
+and collections directories for matching EUID, directory type and no group/other
+write bits. Its restrictive umask applies only in its own child process.
+Ansible Core 2.21.3's Galaxy CLI creates the output directory before its
+nothing-to-do result; it therefore can create a group-writable directory under
+an inherited `0002` mask outside the helper. This is a source-backed
+high-confidence mechanism, not an observed historical mode: that run did not
+log destination ownership/type/mode or its caller umask.
+
+The follow-up sets `umask 077` in the target-user shell itself, rather than
+relying on an outer shell's mask surviving sudo/PAM. Immediately before and
+after Galaxy bootstrap, bounded read-only Python diagnostics `lstat` only the
+resolved collections path and its inferred ephemeral parent. Fixed labels
+report existence, object type, UID/GID and permission mode; missing paths are
+expected, while other errors emit a finite errno/status and fail. No path,
+file contents, environment dump, recursive walk or permission repair is logged
+or performed. Installation remains private to the resolved context, with
+existing helper locking and `driver.safe_files` unchanged.
+Fresh hosted acceptance remains pending. This early refusal does **not**
+verify the Ubuntu 24.04 teardown workaround or provide cleanup/runtime credit.
+
 After both full scenarios succeed, the same nonroot shell performs read-only
 absence checks for containers and networks with the pinned helper's exact
 `io.idarsi.test-run` label, printing remaining container IDs and network names
@@ -477,6 +506,12 @@ tests cover both explicit preservation and absence without directory creation.
 The runner label is asserted. Cleanup checks must follow both successful
 lifecycles, reject container/network/process leftovers and preserve query-error
 status (including pgrep exit 2); pgrep exit 1 is the successful absence case.
+Inherited `0002`, `0022` and `0077` masks are applied only to spawned test
+processes. Every mocked helper/Galaxy/Molecule boundary must see `0077`;
+the fake Galaxy creates a real disposable fixture directory and emits its
+nothing-to-do result. The actual diagnostic Python runs only against those
+fixtures, requiring private `0700` metadata before/after bootstrap and proving
+fixture contents are not printed. No real helper or collection installer runs.
 CI runs it before backend setup. From an existing approved controller
 environment (existing PyYAML plus Python standard library only):
 

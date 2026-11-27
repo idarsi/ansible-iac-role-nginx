@@ -1,6 +1,7 @@
 """Exercise the actual CI shell with fake backends; never execute host setup."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,7 @@ SCRIPT = next(
     for step in STEPS
     if step.get("name") == "Managed nonprivileged validation scenarios"
 )
+METADATA_CODE = SCRIPT.split("<<'METADATA'\n", 1)[1].split("\nMETADATA", 1)[0] + "\n"
 
 # PATH contains only these fakes and bash. Unknown commands fail closed; the
 # prerequisite/setup step is inspected as text, never executed.
@@ -59,6 +61,10 @@ if not inside and name == "id":
     print("runner" if args == ["-un"] else "1001")
     sys.exit(0)
 assert inside, f"{name} called outside credential wrapper"
+if name in ("scenario-context", "ansible-galaxy", "molecule"):
+    inherited_mask = os.umask(0o077)
+    os.umask(inherited_mask)
+    assert inherited_mask == 0o077, oct(inherited_mask)
 if name in ("podman", "virsh", "scenario-context", "ansible-galaxy", "molecule",
             "pgrep"):
     assert os.environ["MOCK_UID"] == os.environ["MOCK_REAL_UID"] == "1001"
@@ -113,19 +119,40 @@ elif name == "scenario-context":
     assert args[4] in ("podman-rocky9-blueprint-validation",
                        "podman-rocky9-validation"), args
     assert args[5:] == ["--role", os.getcwd()], args
-    print(json.dumps({"collections_directory": "/mock/" + args[4]}))
+    collections = Path(os.environ["MOCK_CONTEXTS"]) / args[4] / "collections"
+    collections.parent.mkdir(parents=True)
+    print(json.dumps({"collections_directory": str(collections)}))
 elif name == "python":
-    assert args == ["-c",
-        'import json,sys; print(json.load(sys.stdin)["collections_directory"])'], args
-    print(json.load(sys.stdin)["collections_directory"])
+    if args[0] == "-":
+        assert len(args) == 2
+        destination = Path(args[1])
+        assert destination.parent.parent == Path(os.environ["MOCK_CONTEXTS"])
+        assert destination.name == "collections"
+        code = sys.stdin.read()
+        assert code == os.environ["MOCK_METADATA_CODE"]
+        sys.exit(subprocess.run(
+            [sys.executable, "-", str(destination)], input=code, text=True
+        ).returncode)
+    else:
+        assert args == ["-c",
+            'import json,sys; print(json.load(sys.stdin)["collections_directory"])'], args
+        print(json.load(sys.stdin)["collections_directory"])
 elif name == "ansible-galaxy":
     assert args[:5] == ["collection", "install", "--requirements-file",
                         "requirements.yml", "--collections-path"], args
-    assert args[5] in ("/mock/podman-rocky9-blueprint-validation",
-                       "/mock/podman-rocky9-validation"), args
+    destination = Path(args[5])
+    assert destination.parent.parent == Path(os.environ["MOCK_CONTEXTS"])
+    assert destination.name == "collections"
+    destination.mkdir()
+    assert destination.stat().st_mode & 0o777 == 0o700
+    (destination / "content-sentinel").write_text("DO-NOT-PRINT-FIXTURE-CONTENT")
+    print("Nothing to do. All requested collections are already installed.")
 elif name == "molecule":
     assert args in (["test", "-s", "podman-rocky9-blueprint-validation"],
                     ["test", "-s", "podman-rocky9-validation"]), args
+    destination = Path(os.environ["MOCK_CONTEXTS"]) / args[2] / "collections"
+    assert destination.is_dir()
+    assert destination.stat().st_mode & 0o777 == 0o700
 else:
     raise AssertionError(f"Unexpected command: {name}")
 '''
@@ -140,6 +167,7 @@ class BackendContextTests(unittest.TestCase):
         real_uid: str = "1001", real_gid: str = "1001",
         home: str = "/mock/runner", xdg: str = "",
         containers: str = "", networks: str = "", pgrep_rc: int = 1,
+        inherited_umask: int = 0o022,
     ) -> tuple[subprocess.CompletedProcess, list]:
         """Run only the extracted managed step with an isolated fake PATH."""
         with tempfile.TemporaryDirectory(prefix="nginx-ci-mock ' $-") as directory:
@@ -177,13 +205,19 @@ class BackendContextTests(unittest.TestCase):
                     "MOCK_CONTAINERS": containers,
                     "MOCK_NETWORKS": networks,
                     "MOCK_PGREP_RC": str(pgrep_rc),
+                    "MOCK_CONTEXTS": str(base / "contexts"),
+                    "MOCK_METADATA_CODE": METADATA_CODE,
                 },
+                umask=inherited_umask,
                 capture_output=True,
                 text=True,
                 timeout=15,
                 check=False,
             )
-            calls = [json.loads(line) for line in log.read_text().splitlines()]
+            calls = [
+                json.loads(line).replace(str(base / "contexts"), "/mock")
+                for line in log.read_text().splitlines()
+            ]
             return result, calls
 
     def test_no_backend_initialization_outside_wrapper(self):
@@ -214,8 +248,10 @@ class BackendContextTests(unittest.TestCase):
                 f"--role {ROOT}",
                 'python -c import json,sys; print(json.load(sys.stdin)'
                 '["collections_directory"])',
+                f"python - /mock/{scenario}/collections",
                 "ansible-galaxy collection install --requirements-file "
-                f"requirements.yml --collections-path /mock/{scenario}",
+                f"requirements.yml --collections-path /mock/{scenario}/collections",
+                f"python - /mock/{scenario}/collections",
                 f"molecule test -s {scenario}",
             ])
         expected.extend([
@@ -283,6 +319,38 @@ class BackendContextTests(unittest.TestCase):
     def test_explicit_runtime_directory_preserved_without_creating_one(self):
         result, _ = self.run_script(xdg="/mock/existing runner runtime")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_private_creation_and_bounded_metadata_under_inherited_umasks(self):
+        for inherited in (0o002, 0o022, 0o077):
+            with self.subTest(umask=oct(inherited)):
+                result, _ = self.run_script(inherited_umask=inherited)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(
+                    f"Managed CI inherited umask: {inherited:04o}", result.stdout
+                )
+                records = [
+                    json.loads(line) for line in result.stdout.splitlines()
+                    if line.startswith("{")
+                ]
+                self.assertEqual(len(records), 8)
+                for index, record in enumerate(records):
+                    self.assertEqual(
+                        record["label"],
+                        "scenario_ephemeral" if index % 2 == 0 else "collections",
+                    )
+                    if index % 4 == 1:
+                        self.assertEqual(record, {
+                            "label": "collections", "status": "missing", "exists": False
+                        })
+                    else:
+                        self.assertEqual(record, {
+                            "label": record["label"], "status": "present",
+                            "exists": True, "type": "directory", "uid": os.geteuid(),
+                            "gid": os.getegid(), "mode": "0700",
+                        })
+                self.assertEqual(result.stdout.count("Nothing to do."), 2)
+                self.assertNotIn("DO-NOT-PRINT-FIXTURE-CONTENT", result.stdout)
+                self.assertNotIn("content-sentinel", result.stdout)
 
 
 if __name__ == "__main__":
