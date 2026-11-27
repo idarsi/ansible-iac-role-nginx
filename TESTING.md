@@ -379,7 +379,7 @@ admission; follow the shared recovery contract.
 
 The configured workflow retains inventory/example parsing, syntax and production
 lint and pins the reviewed helper. It arranges both discovery prerequisites on
-its disposable Ubuntu runner and runs the two nonprivileged managed Podman
+its disposable `ubuntu-24.04` runner and runs the two nonprivileged managed Podman
 scenarios as the unprivileged runner. Collections are installed into resolved
 per-context directories. All Podman initialization, Podman/libvirt discovery,
 context resolution, private collection installation and both complete
@@ -432,9 +432,41 @@ same-user sudo while retaining the passwd primary GID and one consistent
 backend context. It does not prove the original final-destroy error resolved;
 fresh hosted lifecycle/cleanup acceptance remains pending.
 
+Run [`45981011685`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45981011685)
+at role `46073c0e199acdd4957659d68e15ec6a17289780` passed the corrected
+same-user credential assertions, but final rootless network teardown still
+failed. The workflow retains that credential refresh and pins the maintained
+Ubuntu 24.04 LTS image as a compatibility baseline.
+[Runner-images issue 15182, maintainer comment 6493085515](https://github.com/actions/runner-images/issues/15182#issuecomment-6493085515)
+reproduces the exact permission-denied teardown error on Ubuntu 26.04 on both
+architectures, with AppArmor denying Podman's SIGTERM to pasta; Ubuntu 24.04
+controls pass. The failed runner's Podman 5.7/passt January 2026 versions match
+the upstream report, but this run has no runner-specific AppArmor audit capture:
+the match is high confidence, not direct proof. Upstream fix
+[15184](https://github.com/actions/runner-images/pull/15184) remains open/unmerged
+as of this correction. No AppArmor/security-policy relaxation or network-backend
+override is applied here. Ubuntu 24.04's current image inventory has Podman
+4.9.3 with default slirp4netns and the required libvirt interfaces. Its kernel
+can also be 7; this is not a kernel-7 avoidance claim or a package-version pin.
+Fresh hosted acceptance of the new baseline remains pending.
+
+After both full scenarios succeed, the same nonroot shell performs read-only
+absence checks for containers and networks with the pinned helper's exact
+`io.idarsi.test-run` label, printing remaining container IDs and network names
+and rejecting any leftovers.
+It also rejects runner-UID `pasta`, `passt` or `slirp4netns` processes by exact
+name (PID-only output). This process-name check is valid **only on the fresh,
+dedicated disposable CI runner**, not a shared developer host. Podman query
+errors fail; pgrep exit 1 alone means no match, while operational errors retain
+their original status. These checks catch leftovers even when older Podman
+reports a network-helper error nonfatally. They perform no removal, kill,
+recovery or retry and are an additional CI absence gate, not authoritative
+helper cleanup-manifest proof.
+
 The host-free regression extracts the actual managed-step shell from workflow
 YAML. A temporary allowlisted PATH mocks `sudo`, identity lookup, Podman, virsh,
-the helper, JSON parsing, collection installation and Molecule; unknown commands
+the helper, JSON parsing, collection installation, Molecule and process-name
+queries; unknown commands
 fail closed. It never executes the prerequisite step or a real backend.
 It checks initialization/discovery and both full scenario commands in order,
 and original nonzero status/no subsequent calls on each boundary failure.
@@ -442,6 +474,9 @@ It rejects wrong real/effective UID/GID, the former `sg` primary GID even with
 valid libvirt membership, incorrect username/HOME, missing supplementary groups
 and substring-only group matches before discovery. Runtime-directory environment
 tests cover both explicit preservation and absence without directory creation.
+The runner label is asserted. Cleanup checks must follow both successful
+lifecycles, reject container/network/process leftovers and preserve query-error
+status (including pgrep exit 2); pgrep exit 1 is the successful absence case.
 CI runs it before backend setup. From an existing approved controller
 environment (existing PyYAML plus Python standard library only):
 

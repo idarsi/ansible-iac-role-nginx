@@ -79,6 +79,24 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+Hosted-image compatibility reassessment (2026-11-27): assessed ref is the
+working tree after `46073c0e199acdd4957659d68e15ec6a17289780` on
+`update/optional-managed-molecule`. Run
+[`45981011685`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45981011685)
+passed the corrected credential assertions but still failed rootless network
+teardown. [Upstream maintainer reproduction](https://github.com/actions/runner-images/issues/15182#issuecomment-6493085515)
+attributes the matching Ubuntu 26.04 error to AppArmor denying Podman-to-pasta
+SIGTERM, with Ubuntu 24.04 controls passing; fix PR 15184 is still open/unmerged.
+Without this runner's audit capture this is a high-confidence match, not direct
+incident proof. The workflow now selects maintained `ubuntu-24.04`, retains the
+same-user credential refresh and all security controls, and adds read-only
+label/process absence checks after both successful lifecycles. This is a runner
+compatibility baseline, not a kernel fix or authoritative helper cleanup proof.
+Portable mocks add source/control-flow evidence only; fresh hosted acceptance
+remains pending. All criterion scores and category subtotals remain unchanged:
+CI enforcement **0/1**, **66.5/100 → 66%, Beta**. Failing CI and existing
+runtime/support gaps retain the Beta cap; no production approval is claimed.
+
 Supplementary-group refresh reassessment (2026-11-27): assessed ref is the
 working tree after `06d5789ae062a3cda58511c4b9ca748333624a9a` on
 `update/optional-managed-molecule`. Hosted run

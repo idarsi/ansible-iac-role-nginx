@@ -9,7 +9,8 @@ on:
   workflow_dispatch:
 jobs:
   checks:
-    runs-on: "ubuntu-latest"
+    # Ubuntu 26.04 rootless network teardown: https://github.com/actions/runner-images/issues/15182
+    runs-on: "ubuntu-24.04"
     steps:
       - uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" # v4.2.2
         with:
@@ -102,6 +103,25 @@ jobs:
               --collections-path "$collections"
             molecule test -s "$scenario"
           done
+          owned_containers="$(podman --remote=false ps --all --quiet \
+            --filter label=io.idarsi.test-run)"
+          owned_networks="$(podman --remote=false network ls --quiet \
+            --filter label=io.idarsi.test-run)"
+          printf 'Remaining Idarsi container IDs: %s\n' "$owned_containers"
+          printf 'Remaining Idarsi network names: %s\n' "$owned_networks"
+          test -z "$owned_containers"
+          test -z "$owned_networks"
+          # Process-name absence is valid only for this dedicated disposable runner UID.
+          if pgrep -u "$runner_uid" -x 'pasta|passt|slirp4netns'; then
+            printf 'Rootless network helper processes remain\n' >&2
+            exit 1
+          else
+            rc=$?
+            if test "$rc" -ne 1; then
+              printf 'Network helper query failed at line %s (exit %s)\n' "$LINENO" "$rc" >&2
+              exit "$rc"
+            fi
+          fi
           SCRIPT
       - name: "Report full-host coverage handoff"
         run: |

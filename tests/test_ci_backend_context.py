@@ -12,9 +12,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ("podman-rocky9-blueprint-validation", "podman-rocky9-validation")
-STEPS = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"][
+CHECKS = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"][
     "checks"
-]["steps"]
+]
+STEPS = CHECKS["steps"]
 SCRIPT = next(
     step["run"]
     for step in STEPS
@@ -58,7 +59,8 @@ if not inside and name == "id":
     print("runner" if args == ["-un"] else "1001")
     sys.exit(0)
 assert inside, f"{name} called outside credential wrapper"
-if name in ("podman", "virsh", "scenario-context", "ansible-galaxy", "molecule"):
+if name in ("podman", "virsh", "scenario-context", "ansible-galaxy", "molecule",
+            "pgrep"):
     assert os.environ["MOCK_UID"] == os.environ["MOCK_REAL_UID"] == "1001"
     assert os.environ["MOCK_GID"] == os.environ["MOCK_REAL_GID"] == "1001"
     assert "980" in os.environ["MOCK_GROUPS"].split()
@@ -89,8 +91,21 @@ elif name == "getent":
           else "runner:x:1001:1001::/mock/runner:/bin/bash")
 elif name == "podman":
     assert args in (["--remote=false", "info"],
-                    ["--remote=false", "network", "ls", "--format", "json"]), args
-    print("[]" if "network" in args else "mock rootless info")
+                    ["--remote=false", "network", "ls", "--format", "json"],
+                    ["--remote=false", "ps", "--all", "--quiet",
+                     "--filter", "label=io.idarsi.test-run"],
+                    ["--remote=false", "network", "ls", "--quiet",
+                     "--filter", "label=io.idarsi.test-run"]), args
+    if "--quiet" in args:
+        print(os.environ["MOCK_CONTAINERS" if "ps" in args else "MOCK_NETWORKS"])
+    else:
+        print("[]" if "network" in args else "mock rootless info")
+elif name == "pgrep":
+    assert args == ["-u", "1001", "-x", "pasta|passt|slirp4netns"], args
+    rc = int(os.environ["MOCK_PGREP_RC"])
+    if rc == 0:
+        print("98765")
+    sys.exit(rc)
 elif name == "virsh":
     assert args == ["--connect", "qemu:///system", "net-list", "--all"], args
 elif name == "scenario-context":
@@ -124,6 +139,7 @@ class BackendContextTests(unittest.TestCase):
         groups: str = "1001 980", name: str = "runner",
         real_uid: str = "1001", real_gid: str = "1001",
         home: str = "/mock/runner", xdg: str = "",
+        containers: str = "", networks: str = "", pgrep_rc: int = 1,
     ) -> tuple[subprocess.CompletedProcess, list]:
         """Run only the extracted managed step with an isolated fake PATH."""
         with tempfile.TemporaryDirectory(prefix="nginx-ci-mock ' $-") as directory:
@@ -132,7 +148,7 @@ class BackendContextTests(unittest.TestCase):
             (base / "scripts").mkdir()
             for command_name in (
                 "sudo", "id", "getent", "podman", "virsh", "scenario-context",
-                "python", "ansible-galaxy", "molecule",
+                "python", "ansible-galaxy", "molecule", "pgrep",
             ):
                 executable = base / command_name
                 executable.write_text(f"#!{sys.executable}\n{MOCK}")
@@ -158,6 +174,9 @@ class BackendContextTests(unittest.TestCase):
                     "MOCK_REAL_GID": real_gid,
                     "MOCK_HOME": home,
                     "MOCK_XDG": xdg,
+                    "MOCK_CONTAINERS": containers,
+                    "MOCK_NETWORKS": networks,
+                    "MOCK_PGREP_RC": str(pgrep_rc),
                 },
                 capture_output=True,
                 text=True,
@@ -173,8 +192,12 @@ class BackendContextTests(unittest.TestCase):
                 continue
             for line in step.get("run", "").splitlines():
                 self.assertFalse(
-                    line.strip().startswith(("podman ", "virsh ", "sg ")), line
+                    line.strip().startswith(("podman ", "virsh ", "sg ", "pgrep ")),
+                    line,
                 )
+
+    def test_runner_uses_maintained_compatibility_baseline(self):
+        self.assertEqual(CHECKS["runs-on"], "ubuntu-24.04")
 
     def test_success_and_fail_fast_at_each_boundary(self):
         result, calls = self.run_script()
@@ -195,6 +218,13 @@ class BackendContextTests(unittest.TestCase):
                 f"requirements.yml --collections-path /mock/{scenario}",
                 f"molecule test -s {scenario}",
             ])
+        expected.extend([
+            "podman --remote=false ps --all --quiet "
+            "--filter label=io.idarsi.test-run",
+            "podman --remote=false network ls --quiet "
+            "--filter label=io.idarsi.test-run",
+            "pgrep -u 1001 -x pasta|passt|slirp4netns",
+        ])
         self.assertEqual(calls, expected)
         # Includes initialization, both discoveries, resolution, JSON parsing,
         # private collection install and full Molecule lifecycle boundaries.
@@ -205,6 +235,27 @@ class BackendContextTests(unittest.TestCase):
                 self.assertEqual(calls, expected[:index + 1])
                 self.assertIn("exit 37", result.stderr)
                 self.assertRegex(result.stderr, r"line [0-9]+")
+
+    def test_cleanup_absence_gate_rejects_leftovers_and_query_errors(self):
+        result, success_calls = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for overrides, rc, last_call in (
+            ({"containers": "container-fixture"}, 1, success_calls[-2]),
+            ({"networks": "network-fixture"}, 1, success_calls[-2]),
+            ({"pgrep_rc": 0}, 1, success_calls[-1]),
+            ({"pgrep_rc": 2}, 2, success_calls[-1]),
+        ):
+            with self.subTest(overrides=overrides):
+                result, calls = self.run_script(**overrides)
+                self.assertEqual(result.returncode, rc, result.stderr)
+                self.assertEqual(calls, success_calls[:success_calls.index(last_call) + 1])
+                self.assertIn(f"molecule test -s {SCENARIOS[1]}", calls)
+                if "containers" in overrides:
+                    self.assertIn("container-fixture", result.stdout)
+                if "networks" in overrides:
+                    self.assertIn("network-fixture", result.stdout)
+                if overrides.get("pgrep_rc") == 0:
+                    self.assertIn("98765", result.stdout)
 
     def test_invalid_credentials_rejected_before_discovery(self):
         identity = ["id -u", "id -ru", "getent passwd 1001", "id -un",
