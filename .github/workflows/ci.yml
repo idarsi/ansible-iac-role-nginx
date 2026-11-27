@@ -34,7 +34,7 @@ jobs:
         run: "ANSIBLE_ROLES_PATH=.. ansible-lint --profile production"
       - name: "Checkout pinned managed helper"
         env:
-          HELPER_SHA: "cc777691026cf300089b8d53760555987c62ce7f"
+          HELPER_SHA: "7fc510d05cfce04e6dc60d70285e8ed9eee725e5"
         run: |
           helper="$RUNNER_TEMP/idarsi-ansible-test-environments"
           git init "$helper"

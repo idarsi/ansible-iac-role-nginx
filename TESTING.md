@@ -218,13 +218,20 @@ role-local venv or install/upgrade shared dependencies. Initialize `tasks/shared
 with the documented recursive submodule checkout.
 
 The helper integration baseline is immutable revision
-[`cc777691026cf300089b8d53760555987c62ce7f`](https://github.com/idarsi/idarsi-ansible-test-environments/tree/cc777691026cf300089b8d53760555987c62ce7f),
+[`7fc510d05cfce04e6dc60d70285e8ed9eee725e5`](https://github.com/idarsi/idarsi-ansible-test-environments/tree/7fc510d05cfce04e6dc60d70285e8ed9eee725e5),
 supporting `idarsi.scenario-context/v1` and `direct` plus `supervised` lifecycle
 modes. A separately reviewed compatible revision is possible; record its exact
 SHA and dirty qualification. Do not relabel dirty-helper results as acceptance
 of the pristine pin. See its
-[isolated-run contract](https://github.com/idarsi/idarsi-ansible-test-environments/blob/cc777691026cf300089b8d53760555987c62ce7f/docs/isolated-test-runs.md),
+[isolated-run contract](https://github.com/idarsi/idarsi-ansible-test-environments/blob/7fc510d05cfce04e6dc60d70285e8ed9eee725e5/docs/isolated-test-runs.md),
 and the optional TUI's `MANAGED_ROLE_GUIDE.md` and `METADATA.md`.
+
+This exact helper code revision was published on 2026-11-27 through
+`update/config-bridge-stdout` (documentation tip `21a8d96`); CI pins the tested
+code revision, not that later documentation commit. Helper campaign 351 records
+bounded ansible-current acceptance of the two previously failed nginx cells
+at role `2c855f7`, not a full-suite or GitHub CI pass. Historical producing
+revisions below remain unchanged.
 
 The repository's unchanged `requirements.txt` pins Core 2.21.3, ansible-lint
 26.8.0, Molecule 26.8.0 and molecule-plugins[podman] 26.7.15.
@@ -375,8 +382,16 @@ lint and pins the reviewed helper. It arranges both discovery prerequisites on
 its disposable Ubuntu runner and runs the two nonprivileged managed Podman
 scenarios as the unprivileged runner. Collections are installed into resolved
 per-context directories. Host setup in this workflow is not authorization to
-modify a developer's host. This configuration has **not** been executed or
-accepted as a GitHub CI pass for the migration.
+modify a developer's host. This configuration has **not** completed successfully
+or been accepted as a GitHub CI pass for the migration.
+
+Run [`45961030496`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45961030496)
+at role `2c855f7e2e17a48c02d7aeedf2f5aba223706af2` passed documentation,
+syntax and lint checks, then failed fetching unpublished helper
+`cc777691026cf300089b8d53760555987c62ce7f` (`not our ref`, exit 128), before
+backend setup or scenario execution. The current pin uses the published tested
+revision above. Replacement CI acceptance remains pending; this publication
+fix adds no runtime credit and does not change Beta / 66% maturity.
 
 The previous privileged Podman service jobs and scheduled platform-matrix job
 cannot simply become hosted Ubuntu KVM jobs. Guardrails, lifecycle, check-mode,

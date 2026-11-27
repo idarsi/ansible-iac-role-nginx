@@ -79,6 +79,22 @@ No guest rerun, runtime credit or criterion change: **66.5/100 → 66%, Beta**.
 
 ## Evidence and limitations
 
+Source-pin publication reassessment (2026-11-27): assessed ref is
+`update/optional-managed-molecule`, working-tree pin/documentation correction
+after `2c855f7e2e17a48c02d7aeedf2f5aba223706af2`. CI run
+[`45961030496`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/45961030496)
+passed documentation, syntax and lint, then failed to fetch unpublished helper
+`cc777691026cf300089b8d53760555987c62ce7f` before backend setup/tests.
+The replacement pin is the now-published tested helper
+`7fc510d05cfce04e6dc60d70285e8ed9eee725e5`, not its later documentation tip.
+This corrects source availability only: no new runtime test was run for this
+change and replacement GitHub CI acceptance is pending. Campaign 351's bounded
+current-lane acceptance remains source-qualified in the helper's testing record;
+it is not full-matrix or GitHub CI evidence. All criterion scores above remain
+unchanged, including CI enforcement 0/1 (no required merge policy established):
+**66.5/100 → 66%, Beta**. Existing evidence gaps and mandatory Beta caps remain;
+no RC or production approval is claimed.
+
 The historical scheduled CI run at
 `50483665786006730a75993c44003d65cada965a`,
 [`44898161095`](https://github.com/idarsi/ansible-iac-role-nginx/actions/runs/44898161095)
